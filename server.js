@@ -120,7 +120,7 @@ function getProjectNativeFavicon(targetUrl) {
     if (hostname.includes('v.')) return `${origin}/images/favicon-32x32.png`;
     if (hostname.includes('cd2.')) return `${origin}/public/favicon.png`;
     if (hostname.includes('img.')) return `${origin}/favicon.png`;
-    if (hostname.includes('catbox.')) return `${origin}/static/favicon.png`;
+    if (hostname.includes('catbox.')) return `${origin}/static/catbox-logo.png`;
     if (hostname.includes('qb.')) return `${origin}/icons/qbittorrent-tray.svg`;
 
     return `https://icons.duckduckgo.com/ip3/${hostname}.ico`;
