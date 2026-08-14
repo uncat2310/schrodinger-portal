@@ -19,6 +19,32 @@ export class PingService {
     }
   }
 
+  /**
+   * 极速全量批量探针 (1 次 HTTP 请求获取全部状态)
+   */
+  async probeBatchAll() {
+    if (!this.hasBackend) return false;
+    try {
+      const res = await fetch('/api/ping-all', { signal: AbortSignal.timeout(2000) });
+      if (res.ok) {
+        const batchData = await res.json();
+        for (const [id, st] of Object.entries(batchData)) {
+          this.statusMap[id] = {
+            checking: false,
+            alive: Boolean(st.alive),
+            latency: st.latency || null,
+            lastChecked: st.lastChecked || Date.now()
+          };
+        }
+        this.onStatusUpdate({ ...this.statusMap });
+        return true;
+      }
+    } catch {
+      // 降级回单服务探测
+    }
+    return false;
+  }
+
   async probeService(project, targetUrl) {
     if (!project.pingEnabled) {
       return { alive: null, latency: null };
@@ -29,10 +55,9 @@ export class PingService {
       try {
         const params = new URLSearchParams();
         if (targetUrl) params.set('url', targetUrl);
-        if (project.port) params.set('port', project.port);
 
         const res = await fetch(`/api/ping?${params.toString()}`, {
-          signal: AbortSignal.timeout(3000)
+          signal: AbortSignal.timeout(2500)
         });
 
         if (res.ok) {
@@ -71,8 +96,11 @@ export class PingService {
   }
 
   async probeAll(projects, getUrlCallback) {
-    const active = projects.filter((p) => p.pingEnabled);
+    // 优先使用 1 次并发批处理
+    const batchSuccess = await this.probeBatchAll();
+    if (batchSuccess) return;
 
+    const active = projects.filter((p) => p.pingEnabled);
     const tasks = active.map(async (project) => {
       this.statusMap[project.id] = { checking: true, ...this.statusMap[project.id] };
       this.onStatusUpdate({ ...this.statusMap });
@@ -86,7 +114,7 @@ export class PingService {
     this.onStatusUpdate({ ...this.statusMap });
   }
 
-  start(getProjectsCallback, getUrlCallback, intervalSec = 20) {
+  start(getProjectsCallback, getUrlCallback, intervalSec = 15) {
     this.stop();
     const tick = () => {
       const projects = getProjectsCallback();
@@ -94,7 +122,7 @@ export class PingService {
     };
 
     tick();
-    this.timer = setInterval(tick, Math.max(10, intervalSec) * 1000);
+    this.timer = setInterval(tick, Math.max(8, intervalSec) * 1000);
   }
 
   stop() {
