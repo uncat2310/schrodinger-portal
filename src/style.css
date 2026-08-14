@@ -235,6 +235,8 @@ body {
    ========================================================================== */
 
 .app-header {
+  position: relative;
+  z-index: 50;
   background: var(--bg-surface);
   backdrop-filter: blur(28px) saturate(180%);
   -webkit-backdrop-filter: blur(28px) saturate(180%);
@@ -416,24 +418,23 @@ body {
 /* Theme Menu */
 .theme-dropdown-wrapper {
   position: relative;
+  z-index: 60;
 }
 
 .theme-menu {
   position: absolute;
-  top: calc(100% + 8px);
+  top: calc(100% + 10px);
   right: 0;
   background: var(--bg-card);
-  backdrop-filter: blur(28px) saturate(180%);
-  -webkit-backdrop-filter: blur(28px) saturate(180%);
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-md);
   padding: 6px;
-  box-shadow: var(--shadow-modal);
+  box-shadow: var(--shadow-modal), 0 12px 36px rgba(0, 0, 0, 0.15);
   display: none;
   flex-direction: column;
   gap: 4px;
   width: 180px;
-  z-index: 50;
+  z-index: 999;
 }
 
 .theme-menu.show {
