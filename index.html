@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="light">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, viewport-fit=cover" />
+  <title>薛定谔的项目</title>
+  <meta name="description" content="薛定谔的项目 · 心之所向，触手可及" />
+  
+  <!-- Apple Web App & Mobile Optimization -->
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+  <meta name="apple-mobile-web-app-title" content="薛定谔的项目" />
+  <meta name="theme-color" content="#f5f5f7" media="(prefers-color-scheme: light)" />
+  <meta name="theme-color" content="#000000" media="(prefers-color-scheme: dark)" />
+
+  <!-- User Cat Favicon -->
+  <link rel="icon" type="image/png" href="/favicon.png" />
+  <link rel="apple-touch-icon" href="/favicon.png" />
+
+  <!-- Stylesheet -->
+  <link rel="stylesheet" href="/src/style.css" />
+</head>
+<body>
+  <!-- Ambient background glow -->
+  <div class="ambient-glow ambient-glow-top"></div>
+  <div class="ambient-glow ambient-glow-bottom"></div>
+
+  <div id="app" class="app-container">
+    <!-- Header -->
+    <header class="app-header">
+      <div class="header-main">
+        <!-- Left: Brand (Avatar + Title + Subtitle) -->
+        <div class="profile-brand">
+          <div class="avatar-box" id="headerAvatar">
+            <img src="/avatar.jpg" alt="Avatar" class="avatar-img" />
+          </div>
+          <div class="brand-text">
+            <h1 class="brand-title" id="headerTitle">薛定谔的项目</h1>
+            <p class="brand-subtitle" id="headerSubtitle">心之所向，触手可及</p>
+          </div>
+        </div>
+
+        <!-- Center: Mathematically Centered Clock & Greeting Widget -->
+        <div class="header-center">
+          <div class="greeting-bar">
+            <span class="greeting-icon" id="greetingIcon">✨</span>
+            <span class="greeting-text" id="greetingText">欢迎回来</span>
+          </div>
+          <div class="live-clock">
+            <span class="clock-time" id="clockTime">00:00:00</span>
+            <span class="clock-sep">·</span>
+            <span class="clock-date" id="clockDate">2026年8月14日 星期五</span>
+          </div>
+        </div>
+
+        <!-- Right: Action Buttons -->
+        <div class="header-actions">
+          <!-- Search Trigger -->
+          <button class="action-btn search-trigger-btn" id="searchTriggerBtn" title="全局搜索 (Ctrl + K)">
+            <svg class="btn-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="11" cy="11" r="8"></circle>
+              <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+            </svg>
+            <span class="search-btn-label">搜索服务...</span>
+            <kbd class="kbd-badge">Ctrl K</kbd>
+          </button>
+
+          <!-- Theme Switcher -->
+          <div class="theme-dropdown-wrapper">
+            <button class="icon-circle-btn" id="themeBtn" title="外观设置" aria-label="外观设置">
+              <svg class="btn-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="12" cy="12" r="5"></circle>
+                <path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"></path>
+              </svg>
+            </button>
+            <div class="theme-menu" id="themeMenu">
+              <button class="theme-option active" data-theme-val="light">
+                <span>☀️</span> 明亮浅色 (默认)
+              </button>
+              <button class="theme-option" data-theme-val="dark">
+                <span>🌙</span> 简洁暗色
+              </button>
+              <button class="theme-option" data-theme-val="auto">
+                <span>🌓</span> 跟随系统
+              </button>
+            </div>
+          </div>
+
+          <!-- Add Project -->
+          <button class="btn btn-primary" id="addProjectBtn" aria-label="添加服务">
+            <svg class="btn-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <line x1="12" y1="5" x2="12" y2="19"></line>
+              <line x1="5" y1="12" x2="19" y2="12"></line>
+            </svg>
+            <span>添加服务</span>
+          </button>
+
+          <!-- Settings -->
+          <button class="icon-circle-btn" id="settingsBtn" title="个性设置" aria-label="设置">
+            <svg class="btn-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="12" cy="12" r="3"></circle>
+              <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+            </svg>
+          </button>
+        </div>
+      </div>
+
+      <!-- Metrics Bar (Clean & Pure) -->
+      <div class="metrics-strip">
+        <div class="metrics-left">
+          <div class="metric-item">
+            <span class="metric-label">服务总计</span>
+            <span class="metric-value" id="metricTotal">0</span>
+          </div>
+          <div class="metric-divider"></div>
+          <div class="metric-item">
+            <span class="metric-label">运行正常</span>
+            <span class="metric-value online" id="metricOnline">0</span>
+          </div>
+        </div>
+      </div>
+    </header>
+
+    <!-- Main Content Area -->
+    <main class="app-main">
+      <!-- Projects Grid Pool -->
+      <section class="project-pool" id="projectPool">
+        <!-- Rendered dynamically -->
+      </section>
+    </main>
+
+    <!-- Footer (Centered & Copyright with GitHub Entry) -->
+    <footer class="app-footer">
+      <div class="footer-content">
+        <span class="footer-copy">© 2026 薛定谔的项目</span>
+        <span class="footer-dot">·</span>
+        <a href="https://github.com/uncat2310/schrodinger-portal" target="_blank" rel="noreferrer" class="footer-github-link" title="GitHub 项目开源仓库" id="footerGithubLink">
+          <svg class="github-svg" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0 0 24 12c0-6.63-5.37-12-12-12z"/>
+          </svg>
+          <span>GitHub</span>
+        </a>
+      </div>
+    </footer>
+  </div>
+
+  <!-- MODAL: Add / Edit Project -->
+  <div class="modal-overlay" id="projectModalOverlay">
+    <div class="modal-card" id="projectModalCard">
+      <div class="modal-header">
+        <h2 class="modal-title" id="projectModalTitle">添加服务</h2>
+        <button class="modal-close-btn" id="closeProjectModalBtn">&times;</button>
+      </div>
+      <form id="projectForm" class="modal-form">
+        <input type="hidden" id="formProjectId" />
+
+        <div class="form-group">
+          <label for="formTitle" class="form-label">服务名称 <span class="required">*</span></label>
+          <input type="text" id="formTitle" class="form-input" placeholder="输入服务名称" required />
+        </div>
+
+        <div class="form-group">
+          <label for="formCustomWan" class="form-label">直达访问 URL <span class="required">*</span></label>
+          <input type="text" id="formCustomWan" class="form-input font-mono" placeholder="https://" required />
+        </div>
+
+        <div class="form-row form-row-2">
+          <div class="form-group">
+            <label for="formIcon" class="form-label">图标 (Emoji)</label>
+            <input type="text" id="formIcon" class="form-input" placeholder="例如 🚀" />
+          </div>
+          <div class="form-group">
+            <label for="formPort" class="form-label">内部探针端口 (供健康检测)</label>
+            <input type="number" id="formPort" class="form-input font-mono" placeholder="端口号" />
+          </div>
+        </div>
+
+        <div class="form-group-checkbox">
+          <label class="checkbox-container">
+            <input type="checkbox" id="formPing" checked />
+            <span class="checkmark"></span>
+            <span class="checkbox-label">启用健康探针 (自动检测服务在线状态)</span>
+          </label>
+        </div>
+
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" id="cancelProjectBtn">取消</button>
+          <button type="submit" class="btn btn-primary" id="saveProjectBtn">保存服务</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- MODAL: Global Search (Ctrl + K) -->
+  <div class="modal-overlay" id="searchModalOverlay">
+    <div class="search-palette-box" id="searchPaletteBox">
+      <div class="search-input-header">
+        <svg class="search-icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="11" cy="11" r="8"></circle>
+          <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+        </svg>
+        <input type="text" id="paletteSearchInput" class="palette-input" placeholder="搜索服务..." autocomplete="off" />
+        <kbd class="kbd-badge" id="closeSearchKbdBtn">ESC 退出</kbd>
+      </div>
+      <div class="search-results-list" id="searchResultsList">
+        <!-- Results rendered here -->
+      </div>
+      <div class="search-footer-hint">
+        <span>↑ ↓ 导航</span>
+        <span>↵ 打开服务</span>
+        <span>点击外部或 ESC 退出</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: Settings -->
+  <div class="modal-overlay" id="settingsModalOverlay">
+    <div class="modal-card modal-card-lg" id="settingsModalCard">
+      <div class="modal-header">
+        <h2 class="modal-title">个性化设置</h2>
+        <button class="modal-close-btn" id="closeSettingsModalBtn">&times;</button>
+      </div>
+      <div class="settings-body">
+        <div class="settings-section">
+          <div class="form-row form-row-2">
+            <div class="form-group">
+              <label for="cfgTitle" class="form-label">主页名称</label>
+              <input type="text" id="cfgTitle" class="form-input" value="薛定谔的项目" />
+            </div>
+            <div class="form-group">
+              <label for="cfgSubtitle" class="form-label">副标题标语</label>
+              <input type="text" id="cfgSubtitle" class="form-input" value="心之所向，触手可及" />
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" id="cancelSettingsBtn">取消</button>
+        <button type="button" class="btn btn-primary" id="saveSettingsBtn">保存设置</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast Notification Container -->
+  <div class="toast-container" id="toastContainer"></div>
+
+  <script type="module" src="/src/app.js"></script>
+</body>
+</html>
