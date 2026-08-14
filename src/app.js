@@ -1,15 +1,105 @@
 import { DEFAULT_CONFIG } from './data/defaultConfig.js';
 import { PingService } from './services/pingService.js';
 
-const STORAGE_KEY = 'SCHRODINGER_PORTAL_V13';
+const STORAGE_KEY = 'SCHRODINGER_PORTAL_V14';
 
 /**
- * 获取网页高分辨率 Favicon 图标
+ * 用户专属服务器默认 8 大自建服务矩阵 (当在 as4837.de 下访问时自动装载)
  */
-function getFaviconUrl(targetUrl) {
+const SERVER_EXCLUSIVE_PROJECTS = [
+  {
+    id: 'p-traffic',
+    categoryId: 'services',
+    title: '香港流量监控面板',
+    customWanUrl: 'https://traffic.as4837.de',
+    icon: '/icons/traffic.svg',
+    pingEnabled: true
+  },
+  {
+    id: 'p-tz',
+    categoryId: 'services',
+    title: 'Komari 探针监控',
+    customWanUrl: 'https://tz.as4837.de',
+    icon: '/icons/komari.svg',
+    pingEnabled: true
+  },
+  {
+    id: 'p-blog',
+    categoryId: 'services',
+    title: '个人独立博客',
+    customWanUrl: 'https://blog.as4837.de',
+    icon: '/icons/blog.svg',
+    pingEnabled: true
+  },
+  {
+    id: 'p-vault',
+    categoryId: 'services',
+    title: 'Vaultwarden 密码库',
+    customWanUrl: 'https://v.as4837.de',
+    icon: '/icons/vaultwarden.svg',
+    pingEnabled: true
+  },
+  {
+    id: 'p-clouddrive',
+    categoryId: 'services',
+    title: 'CloudDrive2 云盘中枢',
+    customWanUrl: 'https://cd2.as4837.de',
+    icon: '/icons/clouddrive2.svg',
+    pingEnabled: true
+  },
+  {
+    id: 'p-gallery',
+    categoryId: 'services',
+    title: 'Local Image Gallery',
+    customWanUrl: 'https://img.as4837.de/_gallery/',
+    icon: '/icons/gallery.svg',
+    pingEnabled: true
+  },
+  {
+    id: 'p-catbox',
+    categoryId: 'services',
+    title: 'Catbox 图床与图像服务',
+    customWanUrl: 'https://catbox.as4837.de',
+    icon: '/icons/catbox.svg',
+    pingEnabled: true
+  },
+  {
+    id: 'p-qb',
+    categoryId: 'services',
+    title: 'qBittorrent 离线下载',
+    customWanUrl: 'https://qb.as4837.de',
+    icon: '/icons/qbittorrent.svg',
+    pingEnabled: true
+  }
+];
+
+/**
+ * 智能多级图标解析引擎
+ * 1. 显式指定图标 / 本地专属高清矢量图标
+ * 2. 根据标题与域名关键字自动匹配内置矢量图标
+ * 3. 公开网站自动提取 Favicon (DuckDuckGo / Google)
+ * 4. 优雅降级为小猫图标
+ */
+export function getProjectIcon(project) {
+  if (project.icon) {
+    return project.icon;
+  }
+
+  const url = project.customWanUrl || '';
+  const title = (project.title || '').toLowerCase();
+
+  if (url.includes('traffic') || title.includes('流量')) return '/icons/traffic.svg';
+  if (url.includes('tz.') || title.includes('探针') || title.includes('komari')) return '/icons/komari.svg';
+  if (url.includes('blog') || title.includes('博客')) return '/icons/blog.svg';
+  if (url.includes('v.') || title.includes('vault') || title.includes('密码')) return '/icons/vaultwarden.svg';
+  if (url.includes('cd2') || title.includes('clouddrive') || title.includes('云盘')) return '/icons/clouddrive2.svg';
+  if (url.includes('img.') || url.includes('gallery') || title.includes('相册') || title.includes('图库')) return '/icons/gallery.svg';
+  if (url.includes('catbox') || title.includes('catbox') || title.includes('图床')) return '/icons/catbox.svg';
+  if (url.includes('qb.') || title.includes('qbittorrent') || title.includes('下载')) return '/icons/qbittorrent.svg';
+
   try {
-    const parsed = new URL(targetUrl);
-    return `https://www.google.com/s2/favicons?domain=${parsed.hostname}&sz=128`;
+    const parsed = new URL(url);
+    return `https://icons.duckduckgo.com/ip3/${parsed.hostname}.ico`;
   } catch {
     return '/favicon.png';
   }
@@ -40,19 +130,29 @@ class App {
   /* -------------------------------------------------------------------------- */
 
   loadState() {
+    const isOwnerDomain = window.location.hostname.includes('as4837.de');
+
     try {
       const saved = localStorage.getItem(STORAGE_KEY);
       if (saved) {
         this.config = JSON.parse(saved);
-        if (!this.config.projects) this.config.projects = DEFAULT_CONFIG.projects;
+        if (!this.config.projects || this.config.projects.length === 0) {
+          this.config.projects = isOwnerDomain ? SERVER_EXCLUSIVE_PROJECTS : DEFAULT_CONFIG.projects;
+        }
         if (!this.config.profile) this.config.profile = DEFAULT_CONFIG.profile;
         if (!this.config.settings) this.config.settings = DEFAULT_CONFIG.settings;
         this.config.categories = DEFAULT_CONFIG.categories;
       } else {
         this.config = JSON.parse(JSON.stringify(DEFAULT_CONFIG));
+        if (isOwnerDomain) {
+          this.config.projects = SERVER_EXCLUSIVE_PROJECTS;
+        }
       }
     } catch {
       this.config = JSON.parse(JSON.stringify(DEFAULT_CONFIG));
+      if (isOwnerDomain) {
+        this.config.projects = SERVER_EXCLUSIVE_PROJECTS;
+      }
     }
 
     if (!this.config.settings.theme) {
@@ -95,7 +195,7 @@ class App {
     if (project.customWanUrl) {
       return project.customWanUrl;
     }
-    const host = this.config.profile.wanDomain || 'as4837.de';
+    const host = this.config.profile.wanDomain || 'example.com';
     const protocol = project.protocol || 'https';
     const portPart = project.port ? `:${project.port}` : '';
     const pathPart = project.path || '/';
@@ -281,19 +381,19 @@ class App {
   }
 
   /* -------------------------------------------------------------------------- */
-  /* Apple 质感极简卡片渲染 (自动抓取网页 Favicon 图标)                         */
+  /* Apple 质感极简卡片渲染 (自动高清晰矢量图标解析)                           */
   /* -------------------------------------------------------------------------- */
 
   renderProjectCard(project) {
     const targetUrl = this.buildProjectUrl(project);
-    const faviconUrl = getFaviconUrl(targetUrl);
+    const iconSrc = getProjectIcon(project);
 
     return `
       <div class="project-card" data-id="${project.id}" data-url="${targetUrl}">
         <div class="card-top">
           <div class="card-identity">
             <div class="card-icon-box">
-              <img src="${faviconUrl}" alt="${project.title}" class="card-favicon-img" onerror="this.onerror=null;this.src='/favicon.png';" />
+              <img src="${iconSrc}" alt="${project.title}" class="card-favicon-img" onerror="this.onerror=null;this.src='/favicon.png';" />
             </div>
             <div class="card-title" title="${project.title}">${project.title}</div>
           </div>
@@ -607,13 +707,12 @@ class App {
     list.innerHTML = this.searchResults
       .map((proj, idx) => {
         const isSelected = idx === this.selectedSearchResultIndex;
-        const targetUrl = this.buildProjectUrl(proj);
-        const faviconUrl = getFaviconUrl(targetUrl);
+        const iconSrc = getProjectIcon(proj);
 
         return `
           <div class="search-result-item ${isSelected ? 'selected' : ''}" data-idx="${idx}">
             <div class="search-result-left">
-              <img src="${faviconUrl}" alt="${proj.title}" style="width: 20px; height: 20px; object-fit: contain;" onerror="this.onerror=null;this.src='/favicon.png';" />
+              <img src="${iconSrc}" alt="${proj.title}" style="width: 20px; height: 20px; object-fit: contain; border-radius: 4px;" onerror="this.onerror=null;this.src='/favicon.png';" />
               <div class="search-result-title">${proj.title}</div>
             </div>
             <span class="kbd-badge">↵ 打开</span>

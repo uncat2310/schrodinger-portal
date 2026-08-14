@@ -1,12 +1,13 @@
 /**
- * 薛定谔的项目 · 纯净预设矩阵 (自动抓取图标 & 纯 URL 端到端探针)
+ * 薛定谔的项目 · 开源标准预设配置 (公开演示 Demo 矩阵)
+ * 仅包含公开通用示例，无任何私有 IP 或个人隐私域名
  */
 export const DEFAULT_CONFIG = {
   profile: {
     title: "薛定谔的项目",
     subtitle: "心之所向，触手可及",
-    avatar: "🐱",
-    wanDomain: "as4837.de"
+    avatar: "/favicon.png",
+    wanDomain: "example.com"
   },
   settings: {
     theme: "light",
@@ -24,59 +25,24 @@ export const DEFAULT_CONFIG = {
   ],
   projects: [
     {
-      id: "p-traffic",
+      id: "p-github",
       categoryId: "services",
-      title: "香港流量监控面板",
-      customWanUrl: "https://traffic.as4837.de",
+      title: "GitHub 代码中枢",
+      customWanUrl: "https://github.com",
       pingEnabled: true
     },
     {
-      id: "p-tz",
+      id: "p-vercel",
       categoryId: "services",
-      title: "Komari 探针监控",
-      customWanUrl: "https://tz.as4837.de",
+      title: "Vercel 部署平台",
+      customWanUrl: "https://vercel.com",
       pingEnabled: true
     },
     {
-      id: "p-blog",
+      id: "p-cloudflare",
       categoryId: "services",
-      title: "个人独立博客",
-      customWanUrl: "https://blog.as4837.de",
-      pingEnabled: true
-    },
-    {
-      id: "p-vault",
-      categoryId: "services",
-      title: "Vaultwarden 密码库",
-      customWanUrl: "https://v.as4837.de",
-      pingEnabled: true
-    },
-    {
-      id: "p-clouddrive",
-      categoryId: "services",
-      title: "CloudDrive2 云盘中枢",
-      customWanUrl: "https://cd2.as4837.de",
-      pingEnabled: true
-    },
-    {
-      id: "p-gallery",
-      categoryId: "services",
-      title: "Local Image Gallery",
-      customWanUrl: "https://img.as4837.de/_gallery/",
-      pingEnabled: true
-    },
-    {
-      id: "p-catbox",
-      categoryId: "services",
-      title: "Catbox 图床与图像服务",
-      customWanUrl: "https://catbox.as4837.de",
-      pingEnabled: true
-    },
-    {
-      id: "p-qb",
-      categoryId: "services",
-      title: "qBittorrent 离线下载",
-      customWanUrl: "https://qb.as4837.de",
+      title: "Cloudflare 边缘网络",
+      customWanUrl: "https://cloudflare.com",
       pingEnabled: true
     }
   ]
