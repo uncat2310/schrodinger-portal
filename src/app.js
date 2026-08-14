@@ -1,10 +1,10 @@
 import { DEFAULT_CONFIG } from './data/defaultConfig.js';
 import { PingService } from './services/pingService.js';
 
-const STORAGE_KEY = 'SCHRODINGER_PORTAL_V14';
+const STORAGE_KEY = 'SCHRODINGER_PORTAL_V15';
 
 /**
- * 用户专属服务器默认 8 大自建服务矩阵 (当在 as4837.de 下访问时自动装载)
+ * 用户专属 8 大自建服务矩阵 (直接抓取各网站自身原生 Favicon)
  */
 const SERVER_EXCLUSIVE_PROJECTS = [
   {
@@ -12,7 +12,6 @@ const SERVER_EXCLUSIVE_PROJECTS = [
     categoryId: 'services',
     title: '香港流量监控面板',
     customWanUrl: 'https://traffic.as4837.de',
-    icon: '/icons/traffic.svg',
     pingEnabled: true
   },
   {
@@ -20,7 +19,6 @@ const SERVER_EXCLUSIVE_PROJECTS = [
     categoryId: 'services',
     title: 'Komari 探针监控',
     customWanUrl: 'https://tz.as4837.de',
-    icon: '/icons/komari.svg',
     pingEnabled: true
   },
   {
@@ -28,7 +26,6 @@ const SERVER_EXCLUSIVE_PROJECTS = [
     categoryId: 'services',
     title: '个人独立博客',
     customWanUrl: 'https://blog.as4837.de',
-    icon: '/icons/blog.svg',
     pingEnabled: true
   },
   {
@@ -36,7 +33,6 @@ const SERVER_EXCLUSIVE_PROJECTS = [
     categoryId: 'services',
     title: 'Vaultwarden 密码库',
     customWanUrl: 'https://v.as4837.de',
-    icon: '/icons/vaultwarden.svg',
     pingEnabled: true
   },
   {
@@ -44,7 +40,6 @@ const SERVER_EXCLUSIVE_PROJECTS = [
     categoryId: 'services',
     title: 'CloudDrive2 云盘中枢',
     customWanUrl: 'https://cd2.as4837.de',
-    icon: '/icons/clouddrive2.svg',
     pingEnabled: true
   },
   {
@@ -52,7 +47,6 @@ const SERVER_EXCLUSIVE_PROJECTS = [
     categoryId: 'services',
     title: 'Local Image Gallery',
     customWanUrl: 'https://img.as4837.de/_gallery/',
-    icon: '/icons/gallery.svg',
     pingEnabled: true
   },
   {
@@ -60,7 +54,6 @@ const SERVER_EXCLUSIVE_PROJECTS = [
     categoryId: 'services',
     title: 'Catbox 图床与图像服务',
     customWanUrl: 'https://catbox.as4837.de',
-    icon: '/icons/catbox.svg',
     pingEnabled: true
   },
   {
@@ -68,38 +61,32 @@ const SERVER_EXCLUSIVE_PROJECTS = [
     categoryId: 'services',
     title: 'qBittorrent 离线下载',
     customWanUrl: 'https://qb.as4837.de',
-    icon: '/icons/qbittorrent.svg',
     pingEnabled: true
   }
 ];
 
 /**
- * 智能多级图标解析引擎
- * 1. 显式指定图标 / 本地专属高清矢量图标
- * 2. 根据标题与域名关键字自动匹配内置矢量图标
- * 3. 公开网站自动提取 Favicon (DuckDuckGo / Google)
- * 4. 优雅降级为小猫图标
+ * 抓取各目标网站自身的原生标签栏 Favicon 图标
  */
-export function getProjectIcon(project) {
-  if (project.icon) {
-    return project.icon;
-  }
-
-  const url = project.customWanUrl || '';
-  const title = (project.title || '').toLowerCase();
-
-  if (url.includes('traffic') || title.includes('流量')) return '/icons/traffic.svg';
-  if (url.includes('tz.') || title.includes('探针') || title.includes('komari')) return '/icons/komari.svg';
-  if (url.includes('blog') || title.includes('博客')) return '/icons/blog.svg';
-  if (url.includes('v.') || title.includes('vault') || title.includes('密码')) return '/icons/vaultwarden.svg';
-  if (url.includes('cd2') || title.includes('clouddrive') || title.includes('云盘')) return '/icons/clouddrive2.svg';
-  if (url.includes('img.') || url.includes('gallery') || title.includes('相册') || title.includes('图库')) return '/icons/gallery.svg';
-  if (url.includes('catbox') || title.includes('catbox') || title.includes('图床')) return '/icons/catbox.svg';
-  if (url.includes('qb.') || title.includes('qbittorrent') || title.includes('下载')) return '/icons/qbittorrent.svg';
-
+export function getProjectNativeFavicon(targetUrl) {
+  if (!targetUrl) return '/favicon.png';
   try {
-    const parsed = new URL(url);
-    return `https://icons.duckduckgo.com/ip3/${parsed.hostname}.ico`;
+    const parsed = new URL(targetUrl);
+    const origin = parsed.origin;
+    const hostname = parsed.hostname;
+
+    // 1. 针对已知子服务的原生 Favicon 路径
+    if (hostname.includes('traffic')) return `${origin}/favicon.svg`;
+    if (hostname.includes('tz.')) return `${origin}/favicon.ico`;
+    if (hostname.includes('blog.')) return `${origin}/favicon.ico`;
+    if (hostname.includes('v.')) return `${origin}/images/favicon-32x32.png`;
+    if (hostname.includes('cd2.')) return `${origin}/public/favicon.png`;
+    if (hostname.includes('img.')) return `${origin}/favicon.ico`;
+    if (hostname.includes('catbox.')) return `${origin}/static/favicon.svg`;
+    if (hostname.includes('qb.')) return `${origin}/icons/qbittorrent-tray.svg`;
+
+    // 2. 针对外部公开网站
+    return `https://icons.duckduckgo.com/ip3/${hostname}.ico`;
   } catch {
     return '/favicon.png';
   }
@@ -166,7 +153,7 @@ class App {
   }
 
   /* -------------------------------------------------------------------------- */
-  /* 应用初始化                                                                 */
+  /* 应用初始化 (无缝接管 SSR 预渲染 DOM)                                       */
   /* -------------------------------------------------------------------------- */
 
   async init() {
@@ -175,7 +162,16 @@ class App {
 
     this.bindEvents();
     this.startClock();
-    this.render();
+    
+    // 如果 SSR 已经预渲染了服务列表，直接绑定事件并探针，避免闪烁
+    const existingCards = document.querySelectorAll('.project-card');
+    if (existingCards.length === this.config.projects.length) {
+      this.bindCardEvents();
+      this.bindRefreshBtn();
+      this.renderMetrics();
+    } else {
+      this.render();
+    }
 
     // 启动后台定时健康探测
     if (this.config.settings.autoPing) {
@@ -309,7 +305,7 @@ class App {
     const metricTotal = document.getElementById('metricTotal');
     const metricOnline = document.getElementById('metricOnline');
     if (metricTotal) metricTotal.textContent = total;
-    if (metricOnline) metricOnline.textContent = onlineCount;
+    if (metricOnline) metricOnline.textContent = onlineCount || total;
   }
 
   updateMetrics() {
@@ -352,7 +348,7 @@ class App {
             </div>
             <div class="stat-badge">
               <span class="stat-label">运行正常</span>
-              <span class="stat-num online" id="metricOnline">0</span>
+              <span class="stat-num online" id="metricOnline">${projects.length}</span>
             </div>
           </div>
         </div>
@@ -381,19 +377,19 @@ class App {
   }
 
   /* -------------------------------------------------------------------------- */
-  /* Apple 质感极简卡片渲染 (自动高清晰矢量图标解析)                           */
+  /* Apple 质感极简卡片渲染 (直接使用目标网站自身的原生 Favicon)                */
   /* -------------------------------------------------------------------------- */
 
   renderProjectCard(project) {
     const targetUrl = this.buildProjectUrl(project);
-    const iconSrc = getProjectIcon(project);
+    const nativeFaviconUrl = getProjectNativeFavicon(targetUrl);
 
     return `
       <div class="project-card" data-id="${project.id}" data-url="${targetUrl}">
         <div class="card-top">
           <div class="card-identity">
             <div class="card-icon-box">
-              <img src="${iconSrc}" alt="${project.title}" class="card-favicon-img" onerror="this.onerror=null;this.src='/favicon.png';" />
+              <img src="${nativeFaviconUrl}" alt="${project.title}" class="card-favicon-img" onerror="this.onerror=null;this.src='/favicon.png';" />
             </div>
             <div class="card-title" title="${project.title}">${project.title}</div>
           </div>
@@ -590,7 +586,7 @@ class App {
   }
 
   /* -------------------------------------------------------------------------- */
-  /* 服务添加与编辑弹窗 (极简两项：名称 + 网址)                                 */
+  /* 服务添加与编辑弹窗                                                         */
   /* -------------------------------------------------------------------------- */
 
   openProjectModal(projectId = null) {
@@ -707,12 +703,13 @@ class App {
     list.innerHTML = this.searchResults
       .map((proj, idx) => {
         const isSelected = idx === this.selectedSearchResultIndex;
-        const iconSrc = getProjectIcon(proj);
+        const targetUrl = this.buildProjectUrl(proj);
+        const nativeFaviconUrl = getProjectNativeFavicon(targetUrl);
 
         return `
           <div class="search-result-item ${isSelected ? 'selected' : ''}" data-idx="${idx}">
             <div class="search-result-left">
-              <img src="${iconSrc}" alt="${proj.title}" style="width: 20px; height: 20px; object-fit: contain; border-radius: 4px;" onerror="this.onerror=null;this.src='/favicon.png';" />
+              <img src="${nativeFaviconUrl}" alt="${proj.title}" style="width: 20px; height: 20px; object-fit: contain; border-radius: 4px;" onerror="this.onerror=null;this.src='/favicon.png';" />
               <div class="search-result-title">${proj.title}</div>
             </div>
             <span class="kbd-badge">↵ 打开</span>

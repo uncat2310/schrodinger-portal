@@ -16,7 +16,7 @@ const DIST_DIR = fs.existsSync(path.join(__dirname, 'dist'))
   : __dirname;
 
 /**
- * 用户专属 8 大自建服务矩阵 (用于 as4837.de 域名下的服务端渲染)
+ * 用户专属 8 大自建服务矩阵 (直接抓取各网站自身原生 Favicon)
  */
 const SERVER_EXCLUSIVE_PROJECTS = [
   {
@@ -24,7 +24,6 @@ const SERVER_EXCLUSIVE_PROJECTS = [
     categoryId: 'services',
     title: '香港流量监控面板',
     customWanUrl: 'https://traffic.as4837.de',
-    icon: '/icons/traffic.svg',
     pingEnabled: true
   },
   {
@@ -32,7 +31,6 @@ const SERVER_EXCLUSIVE_PROJECTS = [
     categoryId: 'services',
     title: 'Komari 探针监控',
     customWanUrl: 'https://tz.as4837.de',
-    icon: '/icons/komari.svg',
     pingEnabled: true
   },
   {
@@ -40,7 +38,6 @@ const SERVER_EXCLUSIVE_PROJECTS = [
     categoryId: 'services',
     title: '个人独立博客',
     customWanUrl: 'https://blog.as4837.de',
-    icon: '/icons/blog.svg',
     pingEnabled: true
   },
   {
@@ -48,7 +45,6 @@ const SERVER_EXCLUSIVE_PROJECTS = [
     categoryId: 'services',
     title: 'Vaultwarden 密码库',
     customWanUrl: 'https://v.as4837.de',
-    icon: '/icons/vaultwarden.svg',
     pingEnabled: true
   },
   {
@@ -56,7 +52,6 @@ const SERVER_EXCLUSIVE_PROJECTS = [
     categoryId: 'services',
     title: 'CloudDrive2 云盘中枢',
     customWanUrl: 'https://cd2.as4837.de',
-    icon: '/icons/clouddrive2.svg',
     pingEnabled: true
   },
   {
@@ -64,7 +59,6 @@ const SERVER_EXCLUSIVE_PROJECTS = [
     categoryId: 'services',
     title: 'Local Image Gallery',
     customWanUrl: 'https://img.as4837.de/_gallery/',
-    icon: '/icons/gallery.svg',
     pingEnabled: true
   },
   {
@@ -72,7 +66,6 @@ const SERVER_EXCLUSIVE_PROJECTS = [
     categoryId: 'services',
     title: 'Catbox 图床与图像服务',
     customWanUrl: 'https://catbox.as4837.de',
-    icon: '/icons/catbox.svg',
     pingEnabled: true
   },
   {
@@ -80,7 +73,6 @@ const SERVER_EXCLUSIVE_PROJECTS = [
     categoryId: 'services',
     title: 'qBittorrent 离线下载',
     customWanUrl: 'https://qb.as4837.de',
-    icon: '/icons/qbittorrent.svg',
     pingEnabled: true
   }
 ];
@@ -94,7 +86,6 @@ const PUBLIC_DEMO_PROJECTS = [
     categoryId: 'services',
     title: 'GitHub 代码中枢',
     customWanUrl: 'https://github.com',
-    icon: 'https://icons.duckduckgo.com/ip3/github.com.ico',
     pingEnabled: true
   },
   {
@@ -102,7 +93,6 @@ const PUBLIC_DEMO_PROJECTS = [
     categoryId: 'services',
     title: 'Vercel 部署平台',
     customWanUrl: 'https://vercel.com',
-    icon: 'https://icons.duckduckgo.com/ip3/vercel.com.ico',
     pingEnabled: true
   },
   {
@@ -110,10 +100,34 @@ const PUBLIC_DEMO_PROJECTS = [
     categoryId: 'services',
     title: 'Cloudflare 边缘网络',
     customWanUrl: 'https://cloudflare.com',
-    icon: 'https://icons.duckduckgo.com/ip3/cloudflare.com.ico',
     pingEnabled: true
   }
 ];
+
+/**
+ * 提取目标网站原生标签栏 Favicon 地址
+ */
+function getProjectNativeFavicon(targetUrl) {
+  if (!targetUrl) return '/favicon.png';
+  try {
+    const parsed = new URL(targetUrl);
+    const origin = parsed.origin;
+    const hostname = parsed.hostname;
+
+    if (hostname.includes('traffic')) return `${origin}/favicon.svg`;
+    if (hostname.includes('tz.')) return `${origin}/favicon.ico`;
+    if (hostname.includes('blog.')) return `${origin}/favicon.ico`;
+    if (hostname.includes('v.')) return `${origin}/images/favicon-32x32.png`;
+    if (hostname.includes('cd2.')) return `${origin}/public/favicon.png`;
+    if (hostname.includes('img.')) return `${origin}/favicon.ico`;
+    if (hostname.includes('catbox.')) return `${origin}/static/favicon.svg`;
+    if (hostname.includes('qb.')) return `${origin}/icons/qbittorrent-tray.svg`;
+
+    return `https://icons.duckduckgo.com/ip3/${hostname}.ico`;
+  } catch {
+    return '/favicon.png';
+  }
+}
 
 /**
  * 服务端渲染助手函数 (SSR Engine)
@@ -129,7 +143,7 @@ function getGreeting(hours) {
 
 function renderCardHtml(project) {
   const targetUrl = project.customWanUrl || '#';
-  const iconSrc = project.icon || '/favicon.png';
+  const iconSrc = getProjectNativeFavicon(targetUrl);
 
   return `
     <div class="project-card" data-id="${project.id}" data-url="${targetUrl}">
