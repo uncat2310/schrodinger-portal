@@ -39,7 +39,23 @@
 
 ## 🚀 快速开始
 
-### 方式一：Docker Compose（推荐）
+### 方式一：Docker 一键拉取运行（推荐，免克隆免编译）
+
+只需一条 Docker 命令即可瞬时启动：
+
+```bash
+docker run -d \
+  --name schrodinger-portal \
+  --restart unless-stopped \
+  -p 3000:3000 \
+  ghcr.io/uncat2310/schrodinger-portal:latest
+```
+
+启动后直接访问 `http://你的服务器IP:3000` 即可！
+
+---
+
+### 方式二：Docker Compose 一键启动
 
 1. 克隆代码仓库：
 ```bash
@@ -47,16 +63,14 @@ git clone https://github.com/uncat2310/schrodinger-portal.git
 cd schrodinger-portal
 ```
 
-2. 一键启动容器：
+2. 启动容器：
 ```bash
 docker compose up -d
 ```
 
-3. 打开浏览器访问 `http://localhost:3000` 即可！
-
 ---
 
-### 方式二：Node.js 本地 / 服务器运行
+### 方式三：Node.js 本地 / 服务器运行
 
 #### 运行环境要求
 - **Node.js**: 18.0.0 或更高版本

@@ -1,5 +1,6 @@
 services:
   schrodinger-portal:
+    image: ghcr.io/uncat2310/schrodinger-portal:latest
     build: .
     container_name: schrodinger-portal
     restart: unless-stopped
