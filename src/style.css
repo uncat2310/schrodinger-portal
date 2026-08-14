@@ -216,16 +216,18 @@ body {
   background: var(--ambient-2);
 }
 
-/* Layout container with iOS safe-area support */
+/* Symmetrical Vertical Layout Container */
 .app-container {
   position: relative;
   z-index: 1;
   max-width: 1320px;
   margin: 0 auto;
-  padding: calc(20px + env(safe-area-inset-top, 0px)) 24px calc(36px + env(safe-area-inset-bottom, 0px));
+  min-height: 100vh;
+  padding: calc(28px + env(safe-area-inset-top, 0px)) 24px calc(28px + env(safe-area-inset-bottom, 0px));
   display: flex;
   flex-direction: column;
-  min-height: 100vh;
+  justify-content: space-between;
+  gap: 20px;
 }
 
 /* ==========================================================================
@@ -240,7 +242,6 @@ body {
   border-radius: var(--radius-xl);
   padding: 14px 22px;
   box-shadow: var(--shadow-card);
-  margin-bottom: 24px;
 }
 
 /* True 3-Column CSS Grid: Left (1fr), Center (auto, 100% Dead-Center), Right (1fr) */
@@ -516,10 +517,16 @@ body {
    PROJECT POOL & SINGLE-ROW INLINE SECTION HEADER
    ========================================================================== */
 
+.app-main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
 .project-pool {
   display: flex;
   flex-direction: column;
-  gap: 20px;
+  gap: 16px;
   flex: 1;
 }
 
@@ -546,7 +553,7 @@ body {
 }
 
 .sec-name {
-  font-size: 1.1rem;
+  font-size: 1.08rem;
   font-weight: 700;
   color: var(--text-primary);
   letter-spacing: -0.015em;
@@ -790,7 +797,7 @@ body {
 
 /* ==========================================================================
    MODAL DIALOGS (RESPONSIVE & MOBILE BOTTOM SHEET)
-   ========================================================================= */
+   ========================================================================== */
 
 .modal-overlay {
   position: fixed;
@@ -1024,12 +1031,11 @@ body {
 }
 
 /* ==========================================================================
-   FOOTER & COPYRIGHT (CENTERED & SLEEK GITHUB ENTRY)
+   FOOTER & COPYRIGHT (SYMMETRICAL BOTTOM SPACING)
    ========================================================================== */
 
 .app-footer {
-  margin-top: auto;
-  padding-top: 32px;
+  padding-top: 20px;
   border-top: 1px solid var(--border-subtle);
   font-size: 0.82rem;
   color: var(--text-muted);
@@ -1130,13 +1136,13 @@ body {
 
 @media (max-width: 768px) {
   .app-container {
-    padding: calc(14px + env(safe-area-inset-top, 0px)) 16px calc(36px + env(safe-area-inset-bottom, 0px));
+    padding: calc(14px + env(safe-area-inset-top, 0px)) 16px calc(24px + env(safe-area-inset-bottom, 0px));
+    gap: 16px;
   }
 
   .app-header {
     padding: 14px 16px;
     border-radius: var(--radius-lg);
-    margin-bottom: 18px;
   }
 
   .header-main {

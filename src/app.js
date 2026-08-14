@@ -1,7 +1,7 @@
 import { DEFAULT_CONFIG } from './data/defaultConfig.js';
 import { PingService } from './services/pingService.js';
 
-const STORAGE_KEY = 'SCHRODINGER_PORTAL_V11';
+const STORAGE_KEY = 'SCHRODINGER_PORTAL_V12';
 
 /**
  * 薛定谔的项目 · 主应用逻辑中枢

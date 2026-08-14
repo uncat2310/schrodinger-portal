@@ -1,5 +1,5 @@
 /**
- * 薛定谔的项目 · 纯净预设矩阵 (6 个核心真实服务)
+ * 薛定谔的项目 · 纯净预设矩阵
  */
 export const DEFAULT_CONFIG = {
   profile: {
@@ -66,6 +66,24 @@ export const DEFAULT_CONFIG = {
       icon: "☁️",
       port: 19798,
       customWanUrl: "https://cd2.as4837.de",
+      pingEnabled: true
+    },
+    {
+      id: "p-gallery",
+      categoryId: "services",
+      title: "Local Image Gallery",
+      icon: "🖼️",
+      port: 39090,
+      customWanUrl: "https://img.as4837.de/_gallery/",
+      pingEnabled: true
+    },
+    {
+      id: "p-catbox",
+      categoryId: "services",
+      title: "Catbox 图床与图像服务",
+      icon: "🐱",
+      port: 7800,
+      customWanUrl: "https://catbox.as4837.de",
       pingEnabled: true
     },
     {
