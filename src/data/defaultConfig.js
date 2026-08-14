@@ -1,14 +1,12 @@
 /**
- * 薛定谔的项目 (Schrödinger's Portal) · 开源初始预设配置
- * 
- * 首次启动时的默认服务示例，用户可在网页端随时添加、编辑或删除。
+ * 薛定谔的项目 · 纯净预设矩阵 (6 个核心真实服务)
  */
 export const DEFAULT_CONFIG = {
   profile: {
     title: "薛定谔的项目",
     subtitle: "心之所向，触手可及",
     avatar: "🐱",
-    wanDomain: "example.com"
+    wanDomain: "as4837.de"
   },
   settings: {
     theme: "light",
@@ -26,30 +24,21 @@ export const DEFAULT_CONFIG = {
   ],
   projects: [
     {
-      id: "p-monitor",
+      id: "p-traffic",
       categoryId: "services",
-      title: "系统探针监控",
+      title: "香港流量监控面板",
+      icon: "📈",
+      port: 8388,
+      customWanUrl: "https://traffic.as4837.de",
+      pingEnabled: true
+    },
+    {
+      id: "p-tz",
+      categoryId: "services",
+      title: "Komari 探针监控",
       icon: "📊",
-      port: 8080,
-      customWanUrl: "https://status.example.com",
-      pingEnabled: true
-    },
-    {
-      id: "p-vault",
-      categoryId: "services",
-      title: "Vaultwarden 密码库",
-      icon: "🔐",
-      port: 3000,
-      customWanUrl: "https://vault.example.com",
-      pingEnabled: true
-    },
-    {
-      id: "p-cloud",
-      categoryId: "services",
-      title: "云盘存储中枢",
-      icon: "☁️",
-      port: 5244,
-      customWanUrl: "https://cloud.example.com",
+      port: 25776,
+      customWanUrl: "https://tz.as4837.de",
       pingEnabled: true
     },
     {
@@ -58,25 +47,34 @@ export const DEFAULT_CONFIG = {
       title: "个人独立博客",
       icon: "📝",
       port: 80,
-      customWanUrl: "https://blog.example.com",
+      customWanUrl: "https://blog.as4837.de",
       pingEnabled: true
     },
     {
-      id: "p-git",
+      id: "p-vault",
       categoryId: "services",
-      title: "代码与版本管理",
-      icon: "🐙",
-      port: 3000,
-      customWanUrl: "https://git.example.com",
+      title: "Vaultwarden 密码库",
+      icon: "🔐",
+      port: 39095,
+      customWanUrl: "https://v.as4837.de",
       pingEnabled: true
     },
     {
-      id: "p-media",
+      id: "p-clouddrive",
       categoryId: "services",
-      title: "影音媒体中枢",
-      icon: "🎬",
-      port: 8096,
-      customWanUrl: "https://media.example.com",
+      title: "CloudDrive2 云盘中枢",
+      icon: "☁️",
+      port: 19798,
+      customWanUrl: "https://cd2.as4837.de",
+      pingEnabled: true
+    },
+    {
+      id: "p-qb",
+      categoryId: "services",
+      title: "qBittorrent 离线下载",
+      icon: "📥",
+      port: 8080,
+      customWanUrl: "https://qb.as4837.de",
       pingEnabled: true
     }
   ]

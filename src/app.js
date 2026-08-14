@@ -1,7 +1,7 @@
 import { DEFAULT_CONFIG } from './data/defaultConfig.js';
 import { PingService } from './services/pingService.js';
 
-const STORAGE_KEY = 'SCHRODINGER_PORTAL_V10';
+const STORAGE_KEY = 'SCHRODINGER_PORTAL_V11';
 
 /**
  * 薛定谔的项目 · 主应用逻辑中枢
@@ -83,7 +83,7 @@ class App {
     if (project.customWanUrl) {
       return project.customWanUrl;
     }
-    const host = this.config.profile.wanDomain || 'example.com';
+    const host = this.config.profile.wanDomain || 'as4837.de';
     const protocol = project.protocol || 'https';
     const portPart = project.port ? `:${project.port}` : '';
     const pathPart = project.path || '/';
@@ -205,7 +205,7 @@ class App {
   }
 
   /* -------------------------------------------------------------------------- */
-  /* 服务列表头部：左侧标题+刷新，右侧服务总计与运行正常统计徽章               */
+  /* 服务列表头部：标题、刷新、总计与正常运行全部同排紧凑居左                   */
   /* -------------------------------------------------------------------------- */
 
   renderProjectPool() {
@@ -226,7 +226,7 @@ class App {
     pool.innerHTML = `
       <div class="category-section">
         <div class="section-header">
-          <div class="section-header-left">
+          <div class="section-header-inline">
             <h2 class="sec-name">服务列表</h2>
             <button class="section-refresh-btn" id="refreshPingBtn" title="重新探测服务状态">
               <svg class="btn-svg spin-on-click" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -234,11 +234,9 @@ class App {
                 <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
               </svg>
             </button>
-          </div>
-          <div class="section-header-right">
             <div class="stat-badge">
               <span class="stat-label">服务总计</span>
-              <span class="stat-num" id="metricTotal">0</span>
+              <span class="stat-num" id="metricTotal">${projects.length}</span>
             </div>
             <div class="stat-badge">
               <span class="stat-label">运行正常</span>

@@ -513,7 +513,7 @@ body {
 }
 
 /* ==========================================================================
-   PROJECT POOL & SECTION HEADER STATS (APPLE SLEEK CONTROL BAR)
+   PROJECT POOL & SINGLE-ROW INLINE SECTION HEADER
    ========================================================================== */
 
 .project-pool {
@@ -529,19 +529,20 @@ body {
   gap: 12px;
 }
 
-/* Section Header: Left (Title + Refresh), Right (Service Stats Badges) */
+/* Section Header: Single Clean Row */
 .section-header {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-start;
   padding-bottom: 8px;
   border-bottom: 1px solid var(--border-subtle);
 }
 
-.section-header-left {
+.section-header-inline {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
+  flex-wrap: wrap;
 }
 
 .sec-name {
@@ -572,13 +573,7 @@ body {
   transform: scale(1.08);
 }
 
-/* Section Right Stats Badges */
-.section-header-right {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
+/* Section Stats Badges (Side-by-side with Title) */
 .stat-badge {
   display: inline-flex;
   align-items: center;
@@ -795,7 +790,7 @@ body {
 
 /* ==========================================================================
    MODAL DIALOGS (RESPONSIVE & MOBILE BOTTOM SHEET)
-   ========================================================================== */
+   ========================================================================= */
 
 .modal-overlay {
   position: fixed;
@@ -1185,15 +1180,8 @@ body {
     display: none;
   }
 
-  .section-header {
-    flex-direction: column;
-    align-items: flex-start;
+  .section-header-inline {
     gap: 8px;
-  }
-
-  .section-header-right {
-    width: 100%;
-    justify-content: flex-start;
   }
 
   .cards-grid {
