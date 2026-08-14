@@ -24,7 +24,6 @@ const SERVER_EXCLUSIVE_PROJECTS = [
     categoryId: 'services',
     title: '香港流量监控面板',
     customWanUrl: 'https://traffic.as4837.de',
-    localProbeUrl: 'http://127.0.0.1:8388',
     localIconSource: { type: 'file', path: '/opt/auto/dashboard_dist/favicon.svg', mime: 'image/svg+xml' },
     pingEnabled: true
   },
@@ -33,7 +32,6 @@ const SERVER_EXCLUSIVE_PROJECTS = [
     categoryId: 'services',
     title: 'Komari 探针监控',
     customWanUrl: 'https://tz.as4837.de',
-    localProbeUrl: 'http://127.0.0.1:25775',
     localIconSource: { type: 'http', url: 'http://127.0.0.1:25775/favicon.ico', mime: 'image/x-icon' },
     pingEnabled: true
   },
@@ -42,8 +40,6 @@ const SERVER_EXCLUSIVE_PROJECTS = [
     categoryId: 'services',
     title: '个人独立博客',
     customWanUrl: 'https://blog.as4837.de',
-    localProbeUrl: 'http://127.0.0.1:80',
-    probeHost: 'blog.as4837.de',
     localIconSource: { type: 'file', path: '/srv/blog/favicon.png', mime: 'image/png' },
     pingEnabled: true
   },
@@ -52,7 +48,6 @@ const SERVER_EXCLUSIVE_PROJECTS = [
     categoryId: 'services',
     title: 'Vaultwarden 密码库',
     customWanUrl: 'https://v.as4837.de',
-    localProbeUrl: 'http://127.0.0.1:39095',
     localIconSource: { type: 'http', url: 'http://127.0.0.1:39095/images/favicon-32x32.png', mime: 'image/png' },
     pingEnabled: true
   },
@@ -61,7 +56,6 @@ const SERVER_EXCLUSIVE_PROJECTS = [
     categoryId: 'services',
     title: 'CloudDrive2 云盘中枢',
     customWanUrl: 'https://cd2.as4837.de',
-    localProbeUrl: 'http://127.0.0.1:19798',
     localIconSource: { type: 'http', url: 'http://127.0.0.1:19798/public/favicon.png', mime: 'image/png' },
     pingEnabled: true
   },
@@ -70,7 +64,6 @@ const SERVER_EXCLUSIVE_PROJECTS = [
     categoryId: 'services',
     title: 'Local Image Gallery',
     customWanUrl: 'https://img.as4837.de/_gallery/',
-    localProbeUrl: 'http://127.0.0.1:39090/health.txt',
     localIconSource: { type: 'file', path: '/srv/tg_media_public/favicon.png', mime: 'image/png' },
     pingEnabled: true
   },
@@ -79,7 +72,6 @@ const SERVER_EXCLUSIVE_PROJECTS = [
     categoryId: 'services',
     title: 'Catbox 图床与图像服务',
     customWanUrl: 'https://catbox.as4837.de',
-    localProbeUrl: 'http://127.0.0.1:7800',
     localIconSource: { type: 'file', path: '/root/projects/catbox-imagehost/frontend/catbox-logo.png', mime: 'image/png' },
     pingEnabled: true
   },
@@ -88,7 +80,6 @@ const SERVER_EXCLUSIVE_PROJECTS = [
     categoryId: 'services',
     title: 'qBittorrent 离线下载',
     customWanUrl: 'https://qb.as4837.de',
-    localProbeUrl: 'http://127.0.0.1:8080',
     localIconSource: { type: 'http', url: 'http://127.0.0.1:8080/icons/qbittorrent-tray.svg', mime: 'image/svg+xml' },
     pingEnabled: true
   }
@@ -158,11 +149,11 @@ async function preloadIconBase64() {
 }
 
 /**
- * 服务端后台心跳守护进程 (实现 0ms 探针时延预加载)
+ * 真实端到端网络延迟探测引擎 (Real WAN End-to-End HTTP Probe)
  */
 const HEALTH_CACHE = new Map();
 
-async function probeHttpEndpoint(targetUrl, timeoutMs = 1800, customHost = null) {
+function probeHttpEndpoint(targetUrl, timeoutMs = 2800) {
   return new Promise((resolve) => {
     try {
       const parsed = new URL(targetUrl);
@@ -171,10 +162,9 @@ async function probeHttpEndpoint(targetUrl, timeoutMs = 1800, customHost = null)
       const startTime = Date.now();
 
       const headers = {
-        'User-Agent': 'Schrodinger-HealthDaemon/3.0',
-        'Accept': '*/*'
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8'
       };
-      if (customHost) headers['Host'] = customHost;
 
       const req = client.request(
         parsed,
@@ -214,13 +204,13 @@ async function probeHttpEndpoint(targetUrl, timeoutMs = 1800, customHost = null)
   });
 }
 
+// 探测全部预设服务真实端到端网络时延
 async function runBackgroundHealthCheck() {
   const tasks = SERVER_EXCLUSIVE_PROJECTS.map(async (proj) => {
-    const probeTarget = proj.localProbeUrl || proj.customWanUrl;
-    const res = await probeHttpEndpoint(probeTarget, 1500, proj.probeHost || null);
+    const res = await probeHttpEndpoint(proj.customWanUrl, 2500);
     HEALTH_CACHE.set(proj.id, {
       alive: res.alive,
-      latency: res.latency || (res.alive ? Math.floor(Math.random() * 15 + 8) : null),
+      latency: res.latency,
       lastChecked: Date.now()
     });
   });
@@ -228,10 +218,10 @@ async function runBackgroundHealthCheck() {
   await Promise.allSettled(tasks);
 }
 
-// 启动后台预热守护进程 (每 8 秒自动刷新一次内存探针缓存)
+// 启动后台预热守护进程
 preloadIconBase64();
 runBackgroundHealthCheck();
-setInterval(runBackgroundHealthCheck, 8000);
+setInterval(runBackgroundHealthCheck, 12000);
 
 /**
  * 获取服务图标 (优先内存 Base64，0ms 加载)
@@ -254,6 +244,8 @@ function getProjectNativeFavicon(project, targetUrl) {
     if (hostname.includes('img.')) return `${origin}/favicon.png`;
     if (hostname.includes('catbox.')) return `${origin}/static/catbox-logo.png`;
     if (hostname.includes('qb.')) return `${origin}/icons/qbittorrent-tray.svg`;
+    if (hostname.includes('cloudflare.')) return 'https://icons.duckduckgo.com/ip3/cloudflare.com.ico';
+    if (hostname.includes('github.')) return 'https://icons.duckduckgo.com/ip3/github.com.ico';
 
     return `https://icons.duckduckgo.com/ip3/${hostname}.ico`;
   } catch {
@@ -277,11 +269,11 @@ function renderCardHtml(project) {
   const targetUrl = project.customWanUrl || '#';
   const iconSrc = getProjectNativeFavicon(project, targetUrl);
 
-  const health = HEALTH_CACHE.get(project.id) || { alive: true, latency: 15 };
-  const isAlive = health.alive !== false;
-  const latencyText = health.latency ? `${health.latency}ms` : '12ms';
+  const health = HEALTH_CACHE.get(project.id);
+  const isAlive = health ? health.alive : true;
+  const latencyText = health && health.latency ? `在线 ${health.latency}ms` : '在线';
   const statusClass = isAlive ? 'online' : 'offline';
-  const statusLabel = isAlive ? `在线 ${latencyText}` : '未启动';
+  const statusLabel = isAlive ? latencyText : '未启动';
 
   return `
     <div class="project-card" data-id="${project.id}" data-url="${targetUrl}">
@@ -419,9 +411,22 @@ function getCachedFile(filePath) {
   return null;
 }
 
+async function parseJsonBody(req) {
+  try {
+    const chunks = [];
+    for await (const chunk of req) {
+      chunks.push(typeof chunk === 'string' ? Buffer.from(chunk) : chunk);
+    }
+    const body = Buffer.concat(chunks).toString('utf-8');
+    return JSON.parse(body || '{}');
+  } catch {
+    return {};
+  }
+}
+
 const server = http.createServer(async (req, res) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
 
   if (req.method === 'OPTIONS') {
@@ -443,7 +448,35 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
-  // 极速全量批量探针 API (1 毫秒瞬时返回内存心跳)
+  // 动态批量并发真实网络延迟探测 API (支持任意自定义项目列表，如 Cloudflare 等)
+  if (pathname === '/api/ping-batch' && req.method === 'POST') {
+    const body = await parseJsonBody(req);
+    const items = Array.isArray(body.items) ? body.items : [];
+
+    const results = {};
+    const tasks = items.map(async (item) => {
+      if (!item.id || !item.url) return;
+      const resData = await probeHttpEndpoint(item.url, 3000);
+      results[item.id] = {
+        alive: resData.alive,
+        latency: resData.latency,
+        lastChecked: Date.now()
+      };
+      // 同步回内存缓存
+      HEALTH_CACHE.set(item.id, results[item.id]);
+    });
+
+    await Promise.allSettled(tasks);
+
+    res.writeHead(200, {
+      'Content-Type': 'application/json',
+      'Cache-Control': 'no-cache'
+    });
+    res.end(JSON.stringify(results));
+    return;
+  }
+
+  // 极速全量批量探针 API (GET)
   if (pathname === '/api/ping-all') {
     const output = {};
     for (const [k, v] of HEALTH_CACHE.entries()) {
@@ -460,7 +493,7 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
-  // 单服务存活探针 API
+  // 单服务真实网络时延探测 API (GET)
   if (pathname === '/api/ping') {
     const targetUrl = parsedUrl.searchParams.get('url');
     if (targetUrl && (targetUrl.startsWith('http://') || targetUrl.startsWith('https://'))) {
@@ -541,5 +574,5 @@ const server = http.createServer(async (req, res) => {
 });
 
 server.listen(PORT, '0.0.0.0', () => {
-  console.log(`🚀 Instant 0ms SSR & Base64 Matrix listening on :${PORT}`);
+  console.log(`🚀 Real-WAN Latency & SSR Matrix listening on :${PORT}`);
 });

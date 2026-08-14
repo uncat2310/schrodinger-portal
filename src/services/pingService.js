@@ -1,6 +1,6 @@
 /**
- * 服务存活探测引擎
- * 负责与服务端双核探针交互，实时同步服务在线状态与延迟
+ * 服务存活与真实网络时延探测引擎
+ * 负责与服务端真实 WAN 探针交互，实时同步服务在线状态与真实端到端毫秒延迟
  */
 export class PingService {
   constructor(onStatusUpdate) {
@@ -20,12 +20,18 @@ export class PingService {
   }
 
   /**
-   * 极速全量批量探针 (1 次 HTTP 请求获取全部状态)
+   * 全量动态并发真实网络延迟探测 (支持预设服务及用户自添加的任意服务如 Cloudflare)
    */
-  async probeBatchAll() {
-    if (!this.hasBackend) return false;
+  async probeBatchProjects(items) {
+    if (!this.hasBackend || items.length === 0) return false;
     try {
-      const res = await fetch('/api/ping-all', { signal: AbortSignal.timeout(2000) });
+      const res = await fetch('/api/ping-batch', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ items }),
+        signal: AbortSignal.timeout(4000)
+      });
+
       if (res.ok) {
         const batchData = await res.json();
         for (const [id, st] of Object.entries(batchData)) {
@@ -40,11 +46,14 @@ export class PingService {
         return true;
       }
     } catch {
-      // 降级回单服务探测
+      // 降级到逐个探测
     }
     return false;
   }
 
+  /**
+   * 单项目降级探测 (真实浏览器端到端网络测速)
+   */
   async probeService(project, targetUrl) {
     if (!project.pingEnabled) {
       return { alive: null, latency: null };
@@ -57,7 +66,7 @@ export class PingService {
         if (targetUrl) params.set('url', targetUrl);
 
         const res = await fetch(`/api/ping?${params.toString()}`, {
-          signal: AbortSignal.timeout(2500)
+          signal: AbortSignal.timeout(3000)
         });
 
         if (res.ok) {
@@ -79,7 +88,7 @@ export class PingService {
       await fetch(targetUrl || '/', {
         method: 'HEAD',
         mode: 'no-cors',
-        signal: AbortSignal.timeout(2000)
+        signal: AbortSignal.timeout(3000)
       });
       return {
         alive: true,
@@ -96,15 +105,26 @@ export class PingService {
   }
 
   async probeAll(projects, getUrlCallback) {
-    // 优先使用 1 次并发批处理
-    const batchSuccess = await this.probeBatchAll();
+    const active = projects.filter((p) => p.pingEnabled);
+    if (active.length === 0) return;
+
+    // 标为检测中
+    active.forEach((p) => {
+      this.statusMap[p.id] = { checking: true, ...this.statusMap[p.id] };
+    });
+    this.onStatusUpdate({ ...this.statusMap });
+
+    const items = active.map((p) => ({
+      id: p.id,
+      url: getUrlCallback(p)
+    }));
+
+    // 优先 1 次 POST 批量请求并发测速全部服务（包括 Cloudflare 等用户自建卡片）
+    const batchSuccess = await this.probeBatchProjects(items);
     if (batchSuccess) return;
 
-    const active = projects.filter((p) => p.pingEnabled);
+    // 降级并发探测
     const tasks = active.map(async (project) => {
-      this.statusMap[project.id] = { checking: true, ...this.statusMap[project.id] };
-      this.onStatusUpdate({ ...this.statusMap });
-
       const url = getUrlCallback(project);
       const result = await this.probeService(project, url);
       this.statusMap[project.id] = { checking: false, ...result };
