@@ -129,7 +129,7 @@
     </footer>
   </div>
 
-  <!-- MODAL: Add / Edit Project -->
+  <!-- MODAL: Add / Edit Project (Ultra-Clean: Title + URL + Auto-Favicon) -->
   <div class="modal-overlay" id="projectModalOverlay">
     <div class="modal-card" id="projectModalCard">
       <div class="modal-header">
@@ -149,22 +149,11 @@
           <input type="text" id="formCustomWan" class="form-input font-mono" placeholder="https://" required />
         </div>
 
-        <div class="form-row form-row-2">
-          <div class="form-group">
-            <label for="formIcon" class="form-label">图标 (Emoji)</label>
-            <input type="text" id="formIcon" class="form-input" placeholder="例如 🚀" />
-          </div>
-          <div class="form-group">
-            <label for="formPort" class="form-label">内部探针端口 (供健康检测)</label>
-            <input type="number" id="formPort" class="form-input font-mono" placeholder="端口号" />
-          </div>
-        </div>
-
         <div class="form-group-checkbox">
           <label class="checkbox-container">
             <input type="checkbox" id="formPing" checked />
             <span class="checkmark"></span>
-            <span class="checkbox-label">启用健康探针 (自动检测服务在线状态)</span>
+            <span class="checkbox-label">启用健康探针 (自动检测服务在线状态与时延)</span>
           </label>
         </div>
 

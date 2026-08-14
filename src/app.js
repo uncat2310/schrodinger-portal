@@ -1,7 +1,19 @@
 import { DEFAULT_CONFIG } from './data/defaultConfig.js';
 import { PingService } from './services/pingService.js';
 
-const STORAGE_KEY = 'SCHRODINGER_PORTAL_V12';
+const STORAGE_KEY = 'SCHRODINGER_PORTAL_V13';
+
+/**
+ * 获取网页高分辨率 Favicon 图标
+ */
+function getFaviconUrl(targetUrl) {
+  try {
+    const parsed = new URL(targetUrl);
+    return `https://www.google.com/s2/favicons?domain=${parsed.hostname}&sz=128`;
+  } catch {
+    return '/favicon.png';
+  }
+}
 
 /**
  * 薛定谔的项目 · 主应用逻辑中枢
@@ -269,17 +281,20 @@ class App {
   }
 
   /* -------------------------------------------------------------------------- */
-  /* Apple 质感极简卡片渲染                                                     */
+  /* Apple 质感极简卡片渲染 (自动抓取网页 Favicon 图标)                         */
   /* -------------------------------------------------------------------------- */
 
   renderProjectCard(project) {
     const targetUrl = this.buildProjectUrl(project);
+    const faviconUrl = getFaviconUrl(targetUrl);
 
     return `
       <div class="project-card" data-id="${project.id}" data-url="${targetUrl}">
         <div class="card-top">
           <div class="card-identity">
-            <div class="card-icon-box">${project.icon || '🚀'}</div>
+            <div class="card-icon-box">
+              <img src="${faviconUrl}" alt="${project.title}" class="card-favicon-img" onerror="this.onerror=null;this.src='/favicon.png';" />
+            </div>
             <div class="card-title" title="${project.title}">${project.title}</div>
           </div>
           <div class="card-status-badge checking" id="status-${project.id}">
@@ -475,7 +490,7 @@ class App {
   }
 
   /* -------------------------------------------------------------------------- */
-  /* 服务添加与编辑弹窗                                                         */
+  /* 服务添加与编辑弹窗 (极简两项：名称 + 网址)                                 */
   /* -------------------------------------------------------------------------- */
 
   openProjectModal(projectId = null) {
@@ -490,16 +505,12 @@ class App {
       document.getElementById('formProjectId').value = proj.id;
       document.getElementById('formTitle').value = proj.title || '';
       document.getElementById('formCustomWan').value = proj.customWanUrl || '';
-      document.getElementById('formPort').value = proj.port || '';
-      document.getElementById('formIcon').value = proj.icon || '🚀';
       document.getElementById('formPing').checked = Boolean(proj.pingEnabled);
     } else {
       titleEl.textContent = '添加新服务';
       document.getElementById('formProjectId').value = '';
       document.getElementById('formTitle').value = '';
       document.getElementById('formCustomWan').value = '';
-      document.getElementById('formPort').value = '';
-      document.getElementById('formIcon').value = '🚀';
       document.getElementById('formPing').checked = true;
     }
 
@@ -514,8 +525,6 @@ class App {
     const id = document.getElementById('formProjectId').value || `proj-${Date.now()}`;
     const title = document.getElementById('formTitle').value.trim();
     const customWanUrl = document.getElementById('formCustomWan').value.trim();
-    const portStr = document.getElementById('formPort').value.trim();
-    const icon = document.getElementById('formIcon').value.trim() || '🚀';
     const pingEnabled = document.getElementById('formPing').checked;
 
     const projectData = {
@@ -523,8 +532,6 @@ class App {
       title,
       categoryId: 'services',
       customWanUrl: customWanUrl || undefined,
-      port: portStr ? parseInt(portStr, 10) : null,
-      icon,
       pingEnabled
     };
 
@@ -600,10 +607,13 @@ class App {
     list.innerHTML = this.searchResults
       .map((proj, idx) => {
         const isSelected = idx === this.selectedSearchResultIndex;
+        const targetUrl = this.buildProjectUrl(proj);
+        const faviconUrl = getFaviconUrl(targetUrl);
+
         return `
           <div class="search-result-item ${isSelected ? 'selected' : ''}" data-idx="${idx}">
             <div class="search-result-left">
-              <span style="font-size: 1.2rem;">${proj.icon || '🚀'}</span>
+              <img src="${faviconUrl}" alt="${proj.title}" style="width: 20px; height: 20px; object-fit: contain;" onerror="this.onerror=null;this.src='/favicon.png';" />
               <div class="search-result-title">${proj.title}</div>
             </div>
             <span class="kbd-badge">↵ 打开</span>
