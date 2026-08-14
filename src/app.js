@@ -1,7 +1,7 @@
 import { DEFAULT_CONFIG } from './data/defaultConfig.js';
 import { PingService } from './services/pingService.js';
 
-const STORAGE_KEY = 'SCHRODINGER_PORTAL_V15';
+const STORAGE_KEY = 'SCHRODINGER_PORTAL_V16';
 
 /**
  * 用户专属 8 大自建服务矩阵 (直接抓取各网站自身原生 Favicon)
@@ -78,11 +78,11 @@ export function getProjectNativeFavicon(targetUrl) {
     // 1. 针对已知子服务的原生 Favicon 路径
     if (hostname.includes('traffic')) return `${origin}/favicon.svg`;
     if (hostname.includes('tz.')) return `${origin}/favicon.ico`;
-    if (hostname.includes('blog.')) return `${origin}/favicon.ico`;
+    if (hostname.includes('blog.')) return `${origin}/favicon.png`;
     if (hostname.includes('v.')) return `${origin}/images/favicon-32x32.png`;
     if (hostname.includes('cd2.')) return `${origin}/public/favicon.png`;
-    if (hostname.includes('img.')) return `${origin}/favicon.ico`;
-    if (hostname.includes('catbox.')) return `${origin}/static/favicon.svg`;
+    if (hostname.includes('img.')) return `${origin}/favicon.png`;
+    if (hostname.includes('catbox.')) return `${origin}/static/favicon.png`;
     if (hostname.includes('qb.')) return `${origin}/icons/qbittorrent-tray.svg`;
 
     // 2. 针对外部公开网站
