@@ -222,14 +222,14 @@ body {
   z-index: 1;
   max-width: 1320px;
   margin: 0 auto;
-  padding: calc(24px + env(safe-area-inset-top, 0px)) 24px calc(36px + env(safe-area-inset-bottom, 0px));
+  padding: calc(20px + env(safe-area-inset-top, 0px)) 24px calc(36px + env(safe-area-inset-bottom, 0px));
   display: flex;
   flex-direction: column;
   min-height: 100vh;
 }
 
 /* ==========================================================================
-   HEADER SECTION (APPLE FROSTED BAR · MATHEMATICALLY BALANCED)
+   HEADER SECTION (APPLE FROSTED GLASS BAR · COMPACT & CENTERED)
    ========================================================================== */
 
 .app-header {
@@ -238,12 +238,9 @@ body {
   -webkit-backdrop-filter: blur(28px) saturate(180%);
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-xl);
-  padding: 18px 24px;
+  padding: 14px 22px;
   box-shadow: var(--shadow-card);
   margin-bottom: 24px;
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
 }
 
 /* True 3-Column CSS Grid: Left (1fr), Center (auto, 100% Dead-Center), Right (1fr) */
@@ -263,8 +260,8 @@ body {
 }
 
 .avatar-box {
-  width: 48px;
-  height: 48px;
+  width: 46px;
+  height: 46px;
   border-radius: 50%;
   display: flex;
   align-items: center;
@@ -290,7 +287,7 @@ body {
 }
 
 .brand-title {
-  font-size: 1.34rem;
+  font-size: 1.32rem;
   font-weight: 700;
   letter-spacing: -0.025em;
   color: var(--text-primary);
@@ -298,7 +295,7 @@ body {
 }
 
 .brand-subtitle {
-  font-size: 0.84rem;
+  font-size: 0.82rem;
   color: var(--text-muted);
 }
 
@@ -506,47 +503,6 @@ body {
   box-shadow: var(--shadow-sm);
 }
 
-/* Metrics Strip (Clean & Symmetrical) */
-.metrics-strip {
-  display: flex;
-  align-items: center;
-  justify-content: flex-start;
-  padding-top: 12px;
-  border-top: 1px solid var(--border-subtle);
-  font-size: 0.82rem;
-}
-
-.metrics-left {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-}
-
-.metric-item {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.metric-label {
-  color: var(--text-muted);
-}
-
-.metric-value {
-  font-weight: 600;
-  color: var(--text-primary);
-}
-
-.metric-value.online {
-  color: var(--color-online);
-}
-
-.metric-divider {
-  width: 1px;
-  height: 12px;
-  background: var(--border-subtle);
-}
-
 .spin-on-click.spinning {
   animation: spin 0.8s linear infinite;
 }
@@ -557,7 +513,7 @@ body {
 }
 
 /* ==========================================================================
-   PROJECT POOL & APPLE ULTRA-CLEAN TILES
+   PROJECT POOL & SECTION HEADER STATS (APPLE SLEEK CONTROL BAR)
    ========================================================================== */
 
 .project-pool {
@@ -573,25 +529,26 @@ body {
   gap: 12px;
 }
 
+/* Section Header: Left (Title + Refresh), Right (Service Stats Badges) */
 .section-header {
   display: flex;
   align-items: center;
-  justify-content: flex-start;
-  padding-bottom: 6px;
+  justify-content: space-between;
+  padding-bottom: 8px;
   border-bottom: 1px solid var(--border-subtle);
 }
 
-.section-header-title {
+.section-header-left {
   display: flex;
   align-items: center;
   gap: 8px;
 }
 
 .sec-name {
-  font-size: 1.08rem;
+  font-size: 1.1rem;
   font-weight: 700;
   color: var(--text-primary);
-  letter-spacing: -0.01em;
+  letter-spacing: -0.015em;
 }
 
 .section-refresh-btn {
@@ -613,6 +570,40 @@ body {
 .section-refresh-btn:hover {
   background: var(--accent-badge-bg);
   transform: scale(1.08);
+}
+
+/* Section Right Stats Badges */
+.section-header-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.stat-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-full);
+  font-size: 0.78rem;
+  box-shadow: var(--shadow-sm);
+}
+
+.stat-label {
+  color: var(--text-muted);
+  font-weight: 500;
+}
+
+.stat-num {
+  font-weight: 700;
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+}
+
+.stat-num.online {
+  color: var(--color-online);
 }
 
 .cards-grid {
@@ -1148,7 +1139,7 @@ body {
   }
 
   .app-header {
-    padding: 16px;
+    padding: 14px 16px;
     border-radius: var(--radius-lg);
     margin-bottom: 18px;
   }
@@ -1192,6 +1183,17 @@ body {
 
   .kbd-badge {
     display: none;
+  }
+
+  .section-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+  }
+
+  .section-header-right {
+    width: 100%;
+    justify-content: flex-start;
   }
 
   .cards-grid {
