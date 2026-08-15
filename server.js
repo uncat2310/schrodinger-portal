@@ -16,77 +16,7 @@ const DIST_DIR = fs.existsSync(path.join(__dirname, 'dist'))
   : __dirname;
 
 /**
- * 用户专属 8 大自建服务矩阵
- */
-const SERVER_EXCLUSIVE_PROJECTS = [
-  {
-    id: 'p-traffic',
-    categoryId: 'services',
-    title: '香港流量监控面板',
-    customWanUrl: 'https://traffic.as4837.de',
-    localIconSource: { type: 'file', path: '/opt/auto/dashboard_dist/favicon.svg', mime: 'image/svg+xml' },
-    pingEnabled: true
-  },
-  {
-    id: 'p-tz',
-    categoryId: 'services',
-    title: 'Komari 探针监控',
-    customWanUrl: 'https://tz.as4837.de',
-    localIconSource: { type: 'http', url: 'http://127.0.0.1:25775/favicon.ico', mime: 'image/x-icon' },
-    pingEnabled: true
-  },
-  {
-    id: 'p-blog',
-    categoryId: 'services',
-    title: '个人独立博客',
-    customWanUrl: 'https://blog.as4837.de',
-    localIconSource: { type: 'file', path: '/srv/blog/favicon.png', mime: 'image/png' },
-    pingEnabled: true
-  },
-  {
-    id: 'p-vault',
-    categoryId: 'services',
-    title: 'Vaultwarden 密码库',
-    customWanUrl: 'https://v.as4837.de',
-    localIconSource: { type: 'http', url: 'http://127.0.0.1:39095/images/favicon-32x32.png', mime: 'image/png' },
-    pingEnabled: true
-  },
-  {
-    id: 'p-clouddrive',
-    categoryId: 'services',
-    title: 'CloudDrive2 云盘中枢',
-    customWanUrl: 'https://cd2.as4837.de',
-    localIconSource: { type: 'http', url: 'http://127.0.0.1:19798/public/favicon.png', mime: 'image/png' },
-    pingEnabled: true
-  },
-  {
-    id: 'p-gallery',
-    categoryId: 'services',
-    title: 'Local Image Gallery',
-    customWanUrl: 'https://img.as4837.de/_gallery/',
-    localIconSource: { type: 'file', path: '/srv/tg_media_public/favicon.png', mime: 'image/png' },
-    pingEnabled: true
-  },
-  {
-    id: 'p-catbox',
-    categoryId: 'services',
-    title: 'Catbox 图床与图像服务',
-    customWanUrl: 'https://catbox.as4837.de',
-    localIconSource: { type: 'file', path: '/root/projects/catbox-imagehost/frontend/catbox-logo.png', mime: 'image/png' },
-    pingEnabled: true
-  },
-  {
-    id: 'p-qb',
-    categoryId: 'services',
-    title: 'qBittorrent 离线下载',
-    customWanUrl: 'https://qb.as4837.de',
-    localIconSource: { type: 'http', url: 'http://127.0.0.1:8080/icons/qbittorrent-tray.svg', mime: 'image/svg+xml' },
-    pingEnabled: true
-  }
-];
-
-/**
- * 开源公开演示 Demo 矩阵
+ * 开源公开演示 Demo 矩阵 (默认公开展示示例，无任何私有域名)
  */
 const PUBLIC_DEMO_PROJECTS = [
   {
@@ -113,12 +43,34 @@ const PUBLIC_DEMO_PROJECTS = [
 ];
 
 /**
+ * 加载服务端项目列表
+ * 优先读取本地配置文件 config/projects.json（已加入 .gitignore，隔离私有域名）
+ * 若未配置则使用开源公开演示 Demo 矩阵
+ */
+function loadServerProjects() {
+  const customConfigPath = path.join(__dirname, 'config', 'projects.json');
+  if (fs.existsSync(customConfigPath)) {
+    try {
+      const content = fs.readFileSync(customConfigPath, 'utf-8');
+      const data = JSON.parse(content);
+      if (Array.isArray(data) && data.length > 0) {
+        return data;
+      }
+    } catch {
+      // 容错降级
+    }
+  }
+  return PUBLIC_DEMO_PROJECTS;
+}
+
+/**
  * 极速内存 Base64 图标缓存池 (实现 0ms 图标首屏秒开)
  */
 const ICON_BASE64_CACHE = new Map();
 
 async function preloadIconBase64() {
-  for (const proj of SERVER_EXCLUSIVE_PROJECTS) {
+  const projects = loadServerProjects();
+  for (const proj of projects) {
     if (!proj.localIconSource) continue;
     try {
       const { type, path: filePath, url: fetchUrl, mime } = proj.localIconSource;
@@ -206,7 +158,9 @@ function probeHttpEndpoint(targetUrl, timeoutMs = 2800) {
 
 // 探测全部预设服务真实端到端网络时延
 async function runBackgroundHealthCheck() {
-  const tasks = SERVER_EXCLUSIVE_PROJECTS.map(async (proj) => {
+  const projects = loadServerProjects();
+  const tasks = projects.map(async (proj) => {
+    if (!proj.customWanUrl) return;
     const res = await probeHttpEndpoint(proj.customWanUrl, 2500);
     HEALTH_CACHE.set(proj.id, {
       alive: res.alive,
@@ -236,16 +190,9 @@ function getProjectNativeFavicon(project, targetUrl) {
     const origin = parsed.origin;
     const hostname = parsed.hostname;
 
-    if (hostname.includes('traffic')) return `${origin}/favicon.svg`;
-    if (hostname.includes('tz.')) return `${origin}/favicon.ico`;
-    if (hostname.includes('blog.')) return `${origin}/favicon.png`;
-    if (hostname.includes('v.')) return `${origin}/images/favicon-32x32.png`;
-    if (hostname.includes('cd2.')) return `${origin}/public/favicon.png`;
-    if (hostname.includes('img.')) return `${origin}/favicon.png`;
-    if (hostname.includes('catbox.')) return `${origin}/static/catbox-logo.png`;
-    if (hostname.includes('qb.')) return `${origin}/icons/qbittorrent-tray.svg`;
-    if (hostname.includes('cloudflare.')) return 'https://icons.duckduckgo.com/ip3/cloudflare.com.ico';
     if (hostname.includes('github.')) return 'https://icons.duckduckgo.com/ip3/github.com.ico';
+    if (hostname.includes('vercel.')) return 'https://icons.duckduckgo.com/ip3/vercel.com.ico';
+    if (hostname.includes('cloudflare.')) return 'https://icons.duckduckgo.com/ip3/cloudflare.com.ico';
 
     return `https://icons.duckduckgo.com/ip3/${hostname}.ico`;
   } catch {
@@ -324,9 +271,8 @@ function renderCardHtml(project) {
   `;
 }
 
-function renderPageSSR(htmlTemplate, host = '') {
-  const isOwner = host.includes('as4837.de');
-  const projects = isOwner ? SERVER_EXCLUSIVE_PROJECTS : PUBLIC_DEMO_PROJECTS;
+function renderPageSSR(htmlTemplate) {
+  const projects = loadServerProjects();
 
   let onlineCount = 0;
   projects.forEach((p) => {
@@ -368,6 +314,9 @@ function renderPageSSR(htmlTemplate, host = '') {
     </div>
   `;
 
+  // 注入服务端项目元数据用于前端平滑初始化
+  const injectedScript = `<script id="initial-projects-data" type="application/json">${JSON.stringify(projects)}</script>`;
+
   return htmlTemplate
     .replace('<span class="greeting-icon" id="greetingIcon">✨</span>', `<span class="greeting-icon" id="greetingIcon">${icon}</span>`)
     .replace('<span class="greeting-text" id="greetingText">欢迎回来</span>', `<span class="greeting-text" id="greetingText">${greeting}</span>`)
@@ -375,11 +324,11 @@ function renderPageSSR(htmlTemplate, host = '') {
     .replace('<span class="clock-date" id="clockDate">2026年8月14日 星期五</span>', `<span class="clock-date" id="clockDate">${dateStr}</span>`)
     .replace(
       '<section class="project-pool" id="projectPool">\n        <!-- Rendered dynamically -->\n      </section>',
-      `<section class="project-pool" id="projectPool">${poolHtml}</section>`
+      `<section class="project-pool" id="projectPool">${poolHtml}</section>${injectedScript}`
     )
     .replace(
       '<section class="project-pool" id="projectPool"></section>',
-      `<section class="project-pool" id="projectPool">${poolHtml}</section>`
+      `<section class="project-pool" id="projectPool">${poolHtml}</section>${injectedScript}`
     );
 }
 
@@ -514,7 +463,7 @@ const server = http.createServer(async (req, res) => {
     const indexEntry = getCachedFile(indexPath);
 
     if (indexEntry) {
-      const ssrHtml = renderPageSSR(indexEntry.text, req.headers.host || '');
+      const ssrHtml = renderPageSSR(indexEntry.text);
       const acceptEncoding = req.headers['accept-encoding'] || '';
 
       res.setHeader('Content-Type', 'text/html; charset=utf-8');

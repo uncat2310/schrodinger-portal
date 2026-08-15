@@ -1,69 +1,7 @@
 import { DEFAULT_CONFIG } from './data/defaultConfig.js';
 import { PingService } from './services/pingService.js';
 
-const STORAGE_KEY = 'SCHRODINGER_PORTAL_V17';
-
-/**
- * 用户专属 8 大自建服务矩阵 (直接抓取各网站自身原生 Favicon)
- */
-const SERVER_EXCLUSIVE_PROJECTS = [
-  {
-    id: 'p-traffic',
-    categoryId: 'services',
-    title: '香港流量监控面板',
-    customWanUrl: 'https://traffic.as4837.de',
-    pingEnabled: true
-  },
-  {
-    id: 'p-tz',
-    categoryId: 'services',
-    title: 'Komari 探针监控',
-    customWanUrl: 'https://tz.as4837.de',
-    pingEnabled: true
-  },
-  {
-    id: 'p-blog',
-    categoryId: 'services',
-    title: '个人独立博客',
-    customWanUrl: 'https://blog.as4837.de',
-    pingEnabled: true
-  },
-  {
-    id: 'p-vault',
-    categoryId: 'services',
-    title: 'Vaultwarden 密码库',
-    customWanUrl: 'https://v.as4837.de',
-    pingEnabled: true
-  },
-  {
-    id: 'p-clouddrive',
-    categoryId: 'services',
-    title: 'CloudDrive2 云盘中枢',
-    customWanUrl: 'https://cd2.as4837.de',
-    pingEnabled: true
-  },
-  {
-    id: 'p-gallery',
-    categoryId: 'services',
-    title: 'Local Image Gallery',
-    customWanUrl: 'https://img.as4837.de/_gallery/',
-    pingEnabled: true
-  },
-  {
-    id: 'p-catbox',
-    categoryId: 'services',
-    title: 'Catbox 图床与图像服务',
-    customWanUrl: 'https://catbox.as4837.de',
-    pingEnabled: true
-  },
-  {
-    id: 'p-qb',
-    categoryId: 'services',
-    title: 'qBittorrent 离线下载',
-    customWanUrl: 'https://qb.as4837.de',
-    pingEnabled: true
-  }
-];
+const STORAGE_KEY = 'SCHRODINGER_PORTAL_V18';
 
 /**
  * 抓取各目标网站自身的原生标签栏 Favicon 图标
@@ -75,7 +13,7 @@ export function getProjectNativeFavicon(targetUrl) {
     const origin = parsed.origin;
     const hostname = parsed.hostname;
 
-    // 1. 针对已知子服务的原生 Favicon 路径
+    // 1. 针对常见已知子服务的原生 Favicon 路径探测
     if (hostname.includes('traffic')) return `${origin}/favicon.svg`;
     if (hostname.includes('tz.')) return `${origin}/favicon.ico`;
     if (hostname.includes('blog.')) return `${origin}/favicon.png`;
@@ -84,6 +22,9 @@ export function getProjectNativeFavicon(targetUrl) {
     if (hostname.includes('img.')) return `${origin}/favicon.png`;
     if (hostname.includes('catbox.')) return `${origin}/static/catbox-logo.png`;
     if (hostname.includes('qb.')) return `${origin}/icons/qbittorrent-tray.svg`;
+    if (hostname.includes('github.')) return 'https://icons.duckduckgo.com/ip3/github.com.ico';
+    if (hostname.includes('vercel.')) return 'https://icons.duckduckgo.com/ip3/vercel.com.ico';
+    if (hostname.includes('cloudflare.')) return 'https://icons.duckduckgo.com/ip3/cloudflare.com.ico';
 
     // 2. 针对外部公开网站
     return `https://icons.duckduckgo.com/ip3/${hostname}.ico`;
@@ -117,28 +58,40 @@ class App {
   /* -------------------------------------------------------------------------- */
 
   loadState() {
-    const isOwnerDomain = window.location.hostname.includes('as4837.de');
+    // 优先读取 SSR 服务端预渲染注入的默认项目列表
+    let ssrProjects = null;
+    const ssrEl = document.getElementById('initial-projects-data');
+    if (ssrEl) {
+      try {
+        const parsed = JSON.parse(ssrEl.textContent);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          ssrProjects = parsed;
+        }
+      } catch {
+        // 容错
+      }
+    }
 
     try {
       const saved = localStorage.getItem(STORAGE_KEY);
       if (saved) {
         this.config = JSON.parse(saved);
         if (!this.config.projects || this.config.projects.length === 0) {
-          this.config.projects = isOwnerDomain ? SERVER_EXCLUSIVE_PROJECTS : DEFAULT_CONFIG.projects;
+          this.config.projects = ssrProjects || DEFAULT_CONFIG.projects;
         }
         if (!this.config.profile) this.config.profile = DEFAULT_CONFIG.profile;
         if (!this.config.settings) this.config.settings = DEFAULT_CONFIG.settings;
         this.config.categories = DEFAULT_CONFIG.categories;
       } else {
         this.config = JSON.parse(JSON.stringify(DEFAULT_CONFIG));
-        if (isOwnerDomain) {
-          this.config.projects = SERVER_EXCLUSIVE_PROJECTS;
+        if (ssrProjects) {
+          this.config.projects = ssrProjects;
         }
       }
     } catch {
       this.config = JSON.parse(JSON.stringify(DEFAULT_CONFIG));
-      if (isOwnerDomain) {
-        this.config.projects = SERVER_EXCLUSIVE_PROJECTS;
+      if (ssrProjects) {
+        this.config.projects = ssrProjects;
       }
     }
 

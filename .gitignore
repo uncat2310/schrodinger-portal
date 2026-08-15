@@ -18,6 +18,8 @@ dist-ssr
 # Sensitive Keys & Environment
 .env
 .env.*
+config/projects.json
+projects.json
 *.key
 *.pem
 *.pub
