@@ -6,24 +6,42 @@
   <title>薛定谔的项目</title>
   <meta name="description" content="薛定谔的项目 · 心之所向，触手可及" />
   
-  <!-- Apple Web App & Mobile Optimization -->
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="default" />
   <meta name="apple-mobile-web-app-title" content="薛定谔的项目" />
-  <meta name="theme-color" content="#f5f5f7" media="(prefers-color-scheme: light)" />
-  <meta name="theme-color" content="#000000" media="(prefers-color-scheme: dark)" />
+  <meta name="theme-color" content="#f5f3ef" media="(prefers-color-scheme: light)" />
+  <meta name="theme-color" content="#121211" media="(prefers-color-scheme: dark)" />
 
-  <!-- Favicon：优先 SVG；Apple Touch 使用头像 JPEG -->
   <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
   <link rel="apple-touch-icon" href="/avatar.jpg" />
 
-  <!-- Stylesheet -->
+  <script>
+    (function () {
+      try {
+        var params = new URLSearchParams(location.search);
+        var theme = params.get('theme');
+        if (theme !== 'light' && theme !== 'dark' && theme !== 'auto') {
+          var raw = localStorage.getItem('SCHRODINGER_PORTAL') || localStorage.getItem('SCHRODINGER_PORTAL_V18');
+          if (raw) {
+            var parsed = JSON.parse(raw);
+            theme = parsed && parsed.settings && parsed.settings.theme;
+          }
+        }
+        if (theme !== 'light' && theme !== 'dark' && theme !== 'auto') {
+          theme = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'auto' : 'light';
+        }
+        document.documentElement.setAttribute('data-theme', theme || 'light');
+      } catch (e) {
+        document.documentElement.setAttribute('data-theme', 'light');
+      }
+    })();
+  </script>
+
   <link rel="stylesheet" href="/src/style.css" />
 </head>
 <body>
-  <!-- Ambient background glow -->
-  <div class="ambient-glow ambient-glow-top"></div>
-  <div class="ambient-glow ambient-glow-bottom"></div>
+  <div class="ambient-glow ambient-glow-top" aria-hidden="true"></div>
+  <div class="ambient-glow ambient-glow-bottom" aria-hidden="true"></div>
 
   <div id="app" class="app-container">
     <!-- Header (Sleek Apple Frosted Glass Top Bar) -->
@@ -35,6 +53,7 @@
             <img src="/avatar.jpg" alt="Avatar" class="avatar-img" />
           </div>
           <div class="brand-text">
+            <div class="brand-eyebrow">SCHRÖDINGER'S PORTAL</div>
             <h1 class="brand-title" id="headerTitle">薛定谔的项目</h1>
             <p class="brand-subtitle" id="headerSubtitle">心之所向，触手可及</p>
           </div>
@@ -130,8 +149,9 @@
   </div>
 
   <!-- MODAL: Add / Edit Project (Ultra-Clean: Title + URL + Auto-Favicon) -->
-  <div class="modal-overlay" id="projectModalOverlay">
+  <div class="modal-overlay" id="projectModalOverlay" role="dialog" aria-modal="true" aria-labelledby="projectModalTitle">
     <div class="modal-card" id="projectModalCard">
+      <div class="modal-drag-handle" aria-hidden="true"></div>
       <div class="modal-header">
         <h2 class="modal-title" id="projectModalTitle">添加服务</h2>
         <button class="modal-close-btn" id="closeProjectModalBtn">&times;</button>
@@ -166,7 +186,7 @@
   </div>
 
   <!-- MODAL: Global Search (Ctrl + K) -->
-  <div class="modal-overlay" id="searchModalOverlay">
+  <div class="modal-overlay" id="searchModalOverlay" role="dialog" aria-modal="true" aria-label="搜索服务">
     <div class="search-palette-box" id="searchPaletteBox">
       <div class="search-input-header">
         <svg class="search-icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -188,10 +208,11 @@
   </div>
 
   <!-- MODAL: Settings -->
-  <div class="modal-overlay" id="settingsModalOverlay">
+  <div class="modal-overlay" id="settingsModalOverlay" role="dialog" aria-modal="true" aria-labelledby="settingsModalTitle">
     <div class="modal-card modal-card-lg" id="settingsModalCard">
+      <div class="modal-drag-handle" aria-hidden="true"></div>
       <div class="modal-header">
-        <h2 class="modal-title">个性化设置</h2>
+        <h2 class="modal-title" id="settingsModalTitle">个性化设置</h2>
         <button class="modal-close-btn" id="closeSettingsModalBtn">&times;</button>
       </div>
       <div class="settings-body">

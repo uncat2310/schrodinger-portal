@@ -8,7 +8,8 @@
     "build": "vite build",
     "preview": "vite preview --port 3000 --host",
     "start": "node server.js",
-    "check": "npm run build"
+    "test": "node --test test/**/*.test.js",
+    "check": "npm run build && npm test"
   },
   "devDependencies": {
     "vite": "^6.0.0"

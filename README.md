@@ -2,7 +2,7 @@
 
 # 🐱 薛定谔的项目 (Schrödinger's Portal)
 
-**轻量 Apple 风格自托管服务导航与健康状态 Portal**
+**Editorial / Gallery 气质的轻量自托管服务导航与健康状态 Portal**
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
 [![Node.js Version](https://img.shields.io/badge/Node.js-18%2B-brightgreen.svg)](https://nodejs.org)
@@ -34,12 +34,12 @@
 
 ## ✨ 核心特性
 
-- 🍎 **Apple 极简视觉**：卡片圆角、柔和阴影与毛玻璃顶栏，保留 Light / Dark / Auto 主题。
-- 🧩 **Node.js 首屏预渲染**：服务端在 HTML 中注入项目卡片，降低首屏空白与首次布局等待。
-- 🔍 **Spotlight 搜索**：`Ctrl + K` / `Cmd + K` 唤起，支持键盘导航与回车直达。
-- 💓 **服务端健康探针**：以服务端探测为主；浏览器 `no-cors` 仅作受限 fallback。
-- 🖼️ **自动 Favicon 识别**：常见自建服务走同源已知路径；公开站点使用域名 favicon fallback；失败回退本地图标。
-- 💾 **浏览器本地编辑**：添加 / 编辑 / 删除默认保存在当前浏览器 LocalStorage，不会自动改服务器配置。
+- 🗞️ **Editorial / Gallery 视觉**：暖纸色 Light、博物馆夜间 Dark，克制的环境色与材质感。
+- 🧩 **Node.js 首屏预渲染**：服务端注入项目卡片，降低首屏空白。
+- 🔍 **Spotlight 搜索**：`Ctrl + K` / `⌘ K`，键盘导航与回车直达。
+- 💓 **服务端后台健康探针**：可信项目由服务端 daemon 探测；浏览器主要读取缓存；自定义项目才主动探测。
+- 🖼️ **自动 Favicon 识别**：自建服务优先同源路径；公开站点域名 fallback；失败回退本地图标。
+- 💾 **浏览器本地编辑**：添加 / 编辑 / 删除保存在当前浏览器 LocalStorage，不会自动改服务器配置，也不会多设备同步。
 - 🐳 **Docker / Compose / Node / PM2** 多种部署方式。
 
 ---
@@ -137,7 +137,7 @@ docker run -d \
         ↓
    SSR 首次加载
 
-浏览器内编辑 / 删除 / 排序偏好
+浏览器内添加 / 编辑 / 删除
         ↓
    localStorage（按浏览器隔离）
 ```
@@ -248,8 +248,8 @@ schrodinger-portal/
 ├── config/
 │   └── projects.example.json    # 公开示例配置（复制为 projects.json）
 ├── docs/screenshots/            # README 真实界面截图
-├── shared/                      # 前后端共用小工具（转义 / URL / 问候 / favicon）
-├── scripts/                     # 可选运维脚本（如截图）
+├── shared/                      # 前后端共用小工具（转义 / URL / 问候 / favicon / SSRF）
+├── test/                        # node:test 安全烟测
 ├── src/
 │   ├── data/defaultConfig.js    # 前端默认配置
 │   ├── services/pingService.js  # 前端探针客户端

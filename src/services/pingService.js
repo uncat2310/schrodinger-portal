@@ -1,7 +1,7 @@
 /**
- * 服务健康探针客户端
- * 主路径：服务端 /api/ping-batch 与 /api/ping
- * 降级：浏览器 no-cors HEAD（仅作连通性 fallback，不是精确测速）
+ * 健康状态客户端
+ * - 服务端可信项目：只读取 /api/ping-all（后台 daemon 写入 HEALTH_CACHE）
+ * - 浏览器自定义项目：走 /api/ping-batch，服务端做 SSRF 校验
  */
 export class PingService {
   constructor(onStatusUpdate) {
@@ -10,6 +10,11 @@ export class PingService {
     this.timer = null;
     this.hasBackend = true;
     this.probing = false;
+    this.paused = false;
+    this.getProjects = null;
+    this.getUrl = null;
+    this.isTrusted = null;
+    this.intervalSec = 15;
   }
 
   async checkBackend() {
@@ -21,74 +26,71 @@ export class PingService {
     }
   }
 
-  /**
-   * 批量探针：优先提交服务端可信项目 ID；自定义服务附带 URL（服务端会做 SSRF 校验）
-   */
-  async probeBatchProjects(items) {
+  /** 拉取服务端 HEALTH_CACHE（不触发外连探测） */
+  async fetchServerCache() {
+    if (!this.hasBackend) return false;
+    try {
+      const res = await fetch('/api/ping-all', { signal: AbortSignal.timeout(4000) });
+      if (!res.ok) return false;
+      const batchData = await res.json();
+      for (const [id, st] of Object.entries(batchData)) {
+        this.statusMap[id] = {
+          checking: false,
+          alive: Boolean(st.alive),
+          latency: st.latency || null,
+          lastChecked: st.lastChecked || Date.now(),
+          error: st.error || null
+        };
+      }
+      this.onStatusUpdate({ ...this.statusMap });
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  async probeCustomBatch(items) {
     if (!this.hasBackend || items.length === 0) return false;
     try {
-      const ids = [];
-      const customItems = [];
-
-      for (const item of items) {
-        if (!item?.id) continue;
-        if (item.trusted) {
-          ids.push(item.id);
-        } else if (item.url) {
-          customItems.push({ id: item.id, url: item.url });
-        } else {
-          ids.push(item.id);
-        }
-      }
-
       const res = await fetch('/api/ping-batch', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          ids: ids.slice(0, 30),
-          items: customItems.slice(0, 30)
+          items: items.slice(0, 30).map((item) => ({ id: item.id, url: item.url }))
         }),
         signal: AbortSignal.timeout(8000)
       });
-
-      if (res.ok) {
-        const batchData = await res.json();
-        for (const [id, st] of Object.entries(batchData)) {
-          this.statusMap[id] = {
-            checking: false,
-            alive: Boolean(st.alive),
-            latency: st.latency || null,
-            lastChecked: st.lastChecked || Date.now(),
-            error: st.error || null
-          };
-        }
-        this.onStatusUpdate({ ...this.statusMap });
-        return true;
+      if (!res.ok) return false;
+      const batchData = await res.json();
+      for (const [id, st] of Object.entries(batchData)) {
+        this.statusMap[id] = {
+          checking: false,
+          alive: Boolean(st.alive),
+          latency: st.latency || null,
+          lastChecked: st.lastChecked || Date.now(),
+          error: st.error || null
+        };
       }
+      this.onStatusUpdate({ ...this.statusMap });
+      return true;
     } catch {
-      // 降级到逐个探测
+      return false;
     }
-    return false;
   }
 
-  /**
-   * 单项目探测：服务端为主，no-cors 仅作受限 fallback
-   */
   async probeService(project, targetUrl) {
     if (!project.pingEnabled) {
       return { alive: null, latency: null };
     }
 
-    if (this.hasBackend) {
+    if (this.hasBackend && targetUrl) {
       try {
         const params = new URLSearchParams();
         if (project.id) params.set('id', project.id);
-        if (targetUrl) params.set('url', targetUrl);
-
+        params.set('url', targetUrl);
         const res = await fetch(`/api/ping?${params.toString()}`, {
           signal: AbortSignal.timeout(4000)
         });
-
         if (res.ok) {
           const data = await res.json();
           return {
@@ -99,11 +101,10 @@ export class PingService {
           };
         }
       } catch {
-        // 网络抖动时降级
+        // fallback below
       }
     }
 
-    // 浏览器 no-cors fallback：opaque 响应只能说明请求发出，不能当作精确时延
     const start = performance.now();
     try {
       await fetch(targetUrl || '/', {
@@ -127,36 +128,61 @@ export class PingService {
   }
 
   async probeAll(projects, getUrlCallback, options = {}) {
-    if (this.probing) return;
+    if (this.probing || this.paused) return;
     this.probing = true;
 
     try {
       const active = projects.filter((p) => p.pingEnabled);
       if (active.length === 0) return;
 
+      const isTrusted =
+        typeof options.isTrusted === 'function'
+          ? options.isTrusted
+          : () => false;
+
+      const trusted = [];
+      const custom = [];
+      for (const project of active) {
+        const url = getUrlCallback(project);
+        if (isTrusted(project, url)) trusted.push(project);
+        else custom.push({ project, url });
+      }
+
       active.forEach((p) => {
         this.statusMap[p.id] = { checking: true, ...this.statusMap[p.id] };
       });
       this.onStatusUpdate({ ...this.statusMap });
 
-      const ssrIds = options.trustedIds instanceof Set ? options.trustedIds : null;
+      if (trusted.length > 0) {
+        await this.fetchServerCache();
+        // 缓存未覆盖的 trusted 项保持 checking→不可用语义由 UI 处理
+        for (const project of trusted) {
+          if (!this.statusMap[project.id] || this.statusMap[project.id].checking) {
+            this.statusMap[project.id] = {
+              checking: false,
+              alive: false,
+              latency: null,
+              lastChecked: Date.now(),
+              error: 'NO_CACHE'
+            };
+          }
+        }
+      }
 
-      const items = active.map((p) => ({
-        id: p.id,
-        url: getUrlCallback(p),
-        trusted: ssrIds ? ssrIds.has(p.id) : false
-      }));
+      if (custom.length > 0) {
+        const ok = await this.probeCustomBatch(
+          custom.map(({ project, url }) => ({ id: project.id, url }))
+        );
+        if (!ok) {
+          await Promise.allSettled(
+            custom.map(async ({ project, url }) => {
+              const result = await this.probeService(project, url);
+              this.statusMap[project.id] = { checking: false, ...result };
+            })
+          );
+        }
+      }
 
-      const batchSuccess = await this.probeBatchProjects(items);
-      if (batchSuccess) return;
-
-      const tasks = active.map(async (project) => {
-        const url = getUrlCallback(project);
-        const result = await this.probeService(project, url);
-        this.statusMap[project.id] = { checking: false, ...result };
-      });
-
-      await Promise.allSettled(tasks);
       this.onStatusUpdate({ ...this.statusMap });
     } finally {
       this.probing = false;
@@ -165,15 +191,34 @@ export class PingService {
 
   start(getProjectsCallback, getUrlCallback, intervalSec = 15, optionsFactory = null) {
     this.stop();
+    this.getProjects = getProjectsCallback;
+    this.getUrl = getUrlCallback;
+    this.optionsFactory = optionsFactory;
+    this.intervalSec = Math.max(8, intervalSec);
+    this.paused = false;
+
     const tick = () => {
-      if (this.probing) return;
-      const projects = getProjectsCallback();
-      const options = typeof optionsFactory === 'function' ? optionsFactory() : {};
-      this.probeAll(projects, getUrlCallback, options);
+      if (this.paused || this.probing) return;
+      if (document.visibilityState === 'hidden') return;
+      const projects = this.getProjects();
+      const options = typeof this.optionsFactory === 'function' ? this.optionsFactory() : {};
+      this.probeAll(projects, this.getUrl, options);
     };
 
     tick();
-    this.timer = setInterval(tick, Math.max(8, intervalSec) * 1000);
+    this.timer = setInterval(tick, this.intervalSec * 1000);
+  }
+
+  pause() {
+    this.paused = true;
+  }
+
+  resume() {
+    this.paused = false;
+    if (this.getProjects && this.getUrl) {
+      const options = typeof this.optionsFactory === 'function' ? this.optionsFactory() : {};
+      this.probeAll(this.getProjects(), this.getUrl, options);
+    }
   }
 
   stop() {

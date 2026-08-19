@@ -10,6 +10,7 @@ import { escapeHtml, escapeAttribute, safeJsonForHtmlScript } from './shared/esc
 import { getGreeting } from './shared/greeting.js';
 import { getProjectNativeFavicon } from './shared/favicon.js';
 import { parseHttpUrl } from './shared/url.js';
+import { validateProbeTarget, createPinnedLookup } from './shared/ssrf.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -19,15 +20,19 @@ const DIST_DIR = path.join(__dirname, 'dist');
 const INDEX_FILE = path.join(DIST_DIR, 'index.html');
 const CORS_ORIGIN = (process.env.CORS_ORIGIN || '').trim();
 const ALLOW_INSECURE_TLS = String(process.env.ALLOW_INSECURE_TLS || 'false').toLowerCase() === 'true';
+const TRUST_PROXY = String(process.env.TRUST_PROXY || 'false').toLowerCase() === 'true';
 
 const MAX_BODY_BYTES = 32 * 1024;
 const MAX_BATCH_SIZE = 30;
 const MAX_ID_LENGTH = 64;
 const MAX_URL_LENGTH = 2048;
-const PROBE_CONCURRENCY = 8;
+const BATCH_PROBE_CONCURRENCY = 8;
+const GLOBAL_PROBE_CONCURRENCY = 16;
 const HEALTH_CACHE_MAX = 200;
 const HEALTH_CACHE_TTL_MS = 10 * 60 * 1000;
 const MAX_REDIRECTS = 3;
+const RATE_LIMIT_WINDOW_MS = 60 * 1000;
+const RATE_LIMIT_MAX = 45;
 
 if (!fs.existsSync(INDEX_FILE)) {
   console.error('Production build not found. Run npm run build first.');
@@ -61,129 +66,66 @@ const PUBLIC_DEMO_PROJECTS = [
   }
 ];
 
+/* -------------------------------------------------------------------------- */
+/* 服务端项目配置缓存（按 mtime）                                              */
+/* -------------------------------------------------------------------------- */
+
+let projectsCache = {
+  mtimeMs: null,
+  projects: null,
+  trustedById: null
+};
+
 function loadServerProjects() {
   const customConfigPath = path.join(__dirname, 'config', 'projects.json');
-  if (fs.existsSync(customConfigPath)) {
-    try {
+  try {
+    if (fs.existsSync(customConfigPath)) {
+      const stat = fs.statSync(customConfigPath);
+      if (projectsCache.projects && projectsCache.mtimeMs === stat.mtimeMs) {
+        return projectsCache.projects;
+      }
       const content = fs.readFileSync(customConfigPath, 'utf-8');
       const data = JSON.parse(content);
       if (Array.isArray(data) && data.length > 0) {
+        const trustedById = new Map();
+        for (const project of data) {
+          if (project?.id && typeof project.id === 'string') {
+            trustedById.set(project.id, project);
+          }
+        }
+        projectsCache = { mtimeMs: stat.mtimeMs, projects: data, trustedById };
         return data;
       }
-    } catch {
-      // 容错降级到公开 Demo
     }
+  } catch {
+    // 容错降级到公开 Demo
   }
+
+  if (projectsCache.projects === PUBLIC_DEMO_PROJECTS) {
+    return PUBLIC_DEMO_PROJECTS;
+  }
+  const trustedById = new Map();
+  for (const project of PUBLIC_DEMO_PROJECTS) {
+    trustedById.set(project.id, project);
+  }
+  projectsCache = { mtimeMs: null, projects: PUBLIC_DEMO_PROJECTS, trustedById };
   return PUBLIC_DEMO_PROJECTS;
 }
 
 function getTrustedProjectMap() {
-  const map = new Map();
-  for (const project of loadServerProjects()) {
-    if (project?.id && typeof project.id === 'string') {
-      map.set(project.id, project);
-    }
-  }
-  return map;
+  loadServerProjects();
+  return projectsCache.trustedById || new Map();
 }
 
-/* -------------------------------------------------------------------------- */
-/* SSRF 防护：禁止探测内网 / loopback / metadata                               */
-/* -------------------------------------------------------------------------- */
-
-function normalizeIp(ip) {
-  const value = String(ip || '').toLowerCase();
-  if (value.startsWith('::ffff:')) {
-    return value.slice(7);
-  }
-  return value;
+function canonicalUrl(value) {
+  const parsed = parseHttpUrl(value, { maxLength: MAX_URL_LENGTH });
+  return parsed ? parsed.href : '';
 }
 
-function isBlockedIp(ip) {
-  const normalized = normalizeIp(ip);
-  const version = net.isIP(normalized);
-  if (!version) return true;
-
-  if (version === 4) {
-    const parts = normalized.split('.').map(Number);
-    if (parts.length !== 4 || parts.some((n) => Number.isNaN(n))) return true;
-    const [a, b] = parts;
-    if (a === 0) return true;
-    if (a === 10) return true;
-    if (a === 127) return true;
-    if (a === 169 && b === 254) return true;
-    if (a === 172 && b >= 16 && b <= 31) return true;
-    if (a === 192 && b === 168) return true;
-    if (a === 100 && b >= 64 && b <= 127) return true;
-    if (a >= 224) return true;
-    return false;
-  }
-
-  if (normalized === '::' || normalized === '::1') return true;
-  if (normalized.startsWith('fc') || normalized.startsWith('fd')) return true;
-  if (normalized.startsWith('fe80')) return true;
-  if (normalized.startsWith('ff')) return true;
-  return false;
-}
-
-const BLOCKED_HOSTNAMES = new Set([
-  'localhost',
-  'metadata.google.internal',
-  'metadata'
-]);
-
-async function validateProbeTarget(rawUrl) {
-  if (typeof rawUrl !== 'string' || rawUrl.length === 0 || rawUrl.length > MAX_URL_LENGTH) {
-    return { ok: false, error: 'INVALID_URL' };
-  }
-
-  let parsed;
-  try {
-    parsed = new URL(rawUrl);
-  } catch {
-    return { ok: false, error: 'INVALID_URL' };
-  }
-
-  if (!['http:', 'https:'].includes(parsed.protocol)) {
-    return { ok: false, error: 'INVALID_PROTOCOL' };
-  }
-
-  const hostname = parsed.hostname.replace(/^\[|\]$/g, '').toLowerCase();
-  if (
-    !hostname ||
-    BLOCKED_HOSTNAMES.has(hostname) ||
-    hostname.endsWith('.localhost') ||
-    hostname.endsWith('.local') ||
-    hostname.endsWith('.internal')
-  ) {
-    return { ok: false, error: 'BLOCKED_HOST' };
-  }
-
-  if (net.isIP(hostname)) {
-    if (isBlockedIp(hostname)) {
-      return { ok: false, error: 'BLOCKED_IP' };
-    }
-    return { ok: true, url: parsed.href };
-  }
-
-  let addresses;
-  try {
-    addresses = await dns.lookup(hostname, { all: true, verbatim: true });
-  } catch {
-    return { ok: false, error: 'DNS_FAILED' };
-  }
-
-  if (!addresses.length) {
-    return { ok: false, error: 'DNS_FAILED' };
-  }
-
-  for (const entry of addresses) {
-    if (isBlockedIp(entry.address)) {
-      return { ok: false, error: 'BLOCKED_IP' };
-    }
-  }
-
-  return { ok: true, url: parsed.href };
+function urlsMatch(a, b) {
+  const left = canonicalUrl(a);
+  const right = canonicalUrl(b);
+  return Boolean(left && right && left === right);
 }
 
 /* -------------------------------------------------------------------------- */
@@ -192,6 +134,10 @@ async function validateProbeTarget(rawUrl) {
 
 const HEALTH_CACHE = new Map();
 let healthCheckRunning = false;
+let globalProbeActive = 0;
+const globalProbeWaiters = [];
+
+const rateLimitMap = new Map();
 
 function pruneHealthCache() {
   const now = Date.now();
@@ -219,6 +165,25 @@ function isValidId(id) {
   return typeof id === 'string' && id.length > 0 && id.length <= MAX_ID_LENGTH;
 }
 
+function acquireGlobalProbeSlot() {
+  if (globalProbeActive < GLOBAL_PROBE_CONCURRENCY) {
+    globalProbeActive += 1;
+    return Promise.resolve();
+  }
+  return new Promise((resolve) => {
+    globalProbeWaiters.push(resolve);
+  });
+}
+
+function releaseGlobalProbeSlot() {
+  globalProbeActive = Math.max(0, globalProbeActive - 1);
+  const next = globalProbeWaiters.shift();
+  if (next) {
+    globalProbeActive += 1;
+    next();
+  }
+}
+
 async function mapPool(items, concurrency, worker) {
   const results = new Array(items.length);
   let cursor = 0;
@@ -235,29 +200,78 @@ async function mapPool(items, concurrency, worker) {
   return results;
 }
 
-function probeHttpEndpoint(targetUrl, options = {}) {
+function getClientIp(req) {
+  if (TRUST_PROXY) {
+    const forwarded = String(req.headers['x-forwarded-for'] || '')
+      .split(',')[0]
+      .trim();
+    if (forwarded) return forwarded;
+  }
+  return req.socket?.remoteAddress || 'unknown';
+}
+
+function checkRateLimit(ip) {
+  const now = Date.now();
+  let entry = rateLimitMap.get(ip);
+  if (!entry || now - entry.windowStart >= RATE_LIMIT_WINDOW_MS) {
+    entry = { windowStart: now, count: 0 };
+    rateLimitMap.set(ip, entry);
+  }
+  entry.count += 1;
+  return entry.count <= RATE_LIMIT_MAX;
+}
+
+setInterval(() => {
+  const now = Date.now();
+  for (const [ip, entry] of rateLimitMap.entries()) {
+    if (now - entry.windowStart >= RATE_LIMIT_WINDOW_MS * 2) {
+      rateLimitMap.delete(ip);
+    }
+  }
+}, RATE_LIMIT_WINDOW_MS).unref?.();
+
+async function probeHttpEndpoint(targetUrl, options = {}) {
   const {
     timeoutMs = 2800,
     redirectCount = 0,
     trusted = false
   } = options;
 
-  return (async () => {
-    if (!trusted) {
-      const validation = await validateProbeTarget(targetUrl);
-      if (!validation.ok) {
-        return { alive: false, error: validation.error };
-      }
-      targetUrl = validation.url;
-    } else {
-      const parsed = parseHttpUrl(targetUrl, { maxLength: MAX_URL_LENGTH });
-      if (!parsed) {
-        return { alive: false, error: 'INVALID_URL' };
-      }
-      targetUrl = parsed.href;
-    }
+  let pinned = null;
 
-    return new Promise((resolve) => {
+  if (!trusted) {
+    const validation = await validateProbeTarget(targetUrl, { maxLength: MAX_URL_LENGTH });
+    if (!validation.ok) {
+      return { alive: false, error: validation.error };
+    }
+    targetUrl = validation.url;
+    pinned = { address: validation.address, family: validation.family, hostname: validation.hostname };
+  } else {
+    const parsed = parseHttpUrl(targetUrl, { maxLength: MAX_URL_LENGTH });
+    if (!parsed) {
+      return { alive: false, error: 'INVALID_URL' };
+    }
+    targetUrl = parsed.href;
+    // 管理员可信配置：允许内网目标，但仍做 DNS pinning 防止请求阶段被换解析
+    try {
+      const host = parsed.hostname.replace(/^\[|\]$/g, '');
+      if (net.isIP(host)) {
+        pinned = { address: host, family: net.isIP(host), hostname: host };
+      } else {
+        const looked = await dns.lookup(host, { all: true, verbatim: true });
+        if (!looked[0]) {
+          return { alive: false, error: 'DNS_FAILED' };
+        }
+        pinned = { address: looked[0].address, family: looked[0].family, hostname: host };
+      }
+    } catch {
+      return { alive: false, error: 'DNS_FAILED' };
+    }
+  }
+
+  await acquireGlobalProbeSlot();
+  try {
+    return await new Promise((resolve) => {
       let settled = false;
       const finish = (result) => {
         if (settled) return;
@@ -270,62 +284,64 @@ function probeHttpEndpoint(targetUrl, options = {}) {
         const isHttps = parsed.protocol === 'https:';
         const client = isHttps ? https : http;
         const startTime = Date.now();
+        const hostname = parsed.hostname.replace(/^\[|\]$/g, '');
 
-        const req = client.request(
-          parsed,
-          {
-            method: 'GET',
-            timeout: timeoutMs,
-            rejectUnauthorized: !ALLOW_INSECURE_TLS,
-            headers: {
-              'User-Agent': 'SchrodingerPortal/1.0 (+health-probe)',
-              Accept: '*/*'
-            }
-          },
-          (res) => {
-            const status = res.statusCode || 0;
-            const location = res.headers.location;
-
-            if (
-              status >= 300 &&
-              status < 400 &&
-              location &&
-              redirectCount < MAX_REDIRECTS
-            ) {
-              res.resume();
-              let nextUrl;
-              try {
-                nextUrl = new URL(location, parsed).href;
-              } catch {
-                finish({ alive: false, error: 'INVALID_REDIRECT', statusCode: status });
-                return;
-              }
-
-              // 跳转目标一律重新校验，防止跳进内网
-              probeHttpEndpoint(nextUrl, {
-                timeoutMs,
-                redirectCount: redirectCount + 1,
-                trusted: false
-              }).then(finish);
-              return;
-            }
-
-            // 收到 headers 后即可丢弃 body，避免下载整页
-            res.resume();
-            const latency = Date.now() - startTime;
-
-            // 2xx/3xx/4xx：服务可访问；5xx：异常但可达；其余视为离线
-            if (status >= 200 && status < 500) {
-              finish({ alive: true, latency, statusCode: status });
-              return;
-            }
-            if (status >= 500 && status < 600) {
-              finish({ alive: false, latency, statusCode: status, error: 'HTTP_5XX' });
-              return;
-            }
-            finish({ alive: false, statusCode: status, error: 'HTTP_ERROR' });
+        const requestOptions = {
+          protocol: parsed.protocol,
+          hostname,
+          port: parsed.port || (isHttps ? 443 : 80),
+          path: `${parsed.pathname}${parsed.search}`,
+          method: 'GET',
+          timeout: timeoutMs,
+          rejectUnauthorized: !ALLOW_INSECURE_TLS,
+          servername: hostname,
+          headers: {
+            Host: parsed.host,
+            'User-Agent': 'SchrodingerPortal/1.0 (+health-probe)',
+            Accept: '*/*'
           }
-        );
+        };
+
+        if (pinned?.address) {
+          requestOptions.lookup = createPinnedLookup(pinned.address, pinned.family);
+        }
+
+        const req = client.request(requestOptions, (res) => {
+          const status = res.statusCode || 0;
+          const location = res.headers.location;
+
+          if (status >= 300 && status < 400 && location && redirectCount < MAX_REDIRECTS) {
+            res.resume();
+            let nextUrl;
+            try {
+              nextUrl = new URL(location, parsed).href;
+            } catch {
+              finish({ alive: false, error: 'INVALID_REDIRECT', statusCode: status });
+              return;
+            }
+
+            // 跳转目标必须重新校验 + pinning（即使原请求 trusted）
+            probeHttpEndpoint(nextUrl, {
+              timeoutMs,
+              redirectCount: redirectCount + 1,
+              trusted: false
+            }).then(finish);
+            return;
+          }
+
+          res.resume();
+          const latency = Date.now() - startTime;
+
+          if (status >= 200 && status < 500) {
+            finish({ alive: true, latency, statusCode: status });
+            return;
+          }
+          if (status >= 500 && status < 600) {
+            finish({ alive: false, latency, statusCode: status, error: 'HTTP_5XX' });
+            return;
+          }
+          finish({ alive: false, statusCode: status, error: 'HTTP_ERROR' });
+        });
 
         req.on('timeout', () => {
           req.destroy();
@@ -334,11 +350,15 @@ function probeHttpEndpoint(targetUrl, options = {}) {
 
         req.on('error', (err) => {
           const code = err?.code || '';
-          if (code === 'CERT_HAS_EXPIRED' || code === 'UNABLE_TO_VERIFY_LEAF_SIGNATURE' || code === 'ERR_TLS_CERT_ALTNAME_INVALID') {
+          if (
+            code === 'CERT_HAS_EXPIRED' ||
+            code === 'UNABLE_TO_VERIFY_LEAF_SIGNATURE' ||
+            code === 'ERR_TLS_CERT_ALTNAME_INVALID'
+          ) {
             finish({ alive: false, error: 'TLS_ERROR' });
             return;
           }
-          finish({ alive: false, error: err.message || 'ERR_NETWORK' });
+          finish({ alive: false, error: 'ERR_NETWORK' });
         });
 
         req.end();
@@ -346,7 +366,9 @@ function probeHttpEndpoint(targetUrl, options = {}) {
         finish({ alive: false, error: 'INVALID_URL' });
       }
     });
-  })();
+  } finally {
+    releaseGlobalProbeSlot();
+  }
 }
 
 async function runBackgroundHealthCheck() {
@@ -354,7 +376,7 @@ async function runBackgroundHealthCheck() {
   healthCheckRunning = true;
   try {
     const projects = loadServerProjects().filter((p) => p.customWanUrl && p.pingEnabled !== false);
-    await mapPool(projects, PROBE_CONCURRENCY, async (proj) => {
+    await mapPool(projects, BATCH_PROBE_CONCURRENCY, async (proj) => {
       const res = await probeHttpEndpoint(proj.customWanUrl, {
         timeoutMs: 2500,
         trusted: true
@@ -390,6 +412,7 @@ function renderCardHtml(project) {
   const rawUrl = project.customWanUrl || '';
   const parsed = parseHttpUrl(rawUrl, { maxLength: MAX_URL_LENGTH });
   const targetUrl = parsed ? parsed.href : '#';
+  const hostname = parsed ? parsed.hostname : '';
   const iconSrc = resolveFaviconForProject(project, parsed ? parsed.href : '');
   const title = project.title || '未命名服务';
 
@@ -399,7 +422,7 @@ function renderCardHtml(project) {
   if (health) {
     if (health.alive) {
       statusClass = 'online';
-      statusLabel = health.latency ? `在线 ${health.latency}ms` : '在线';
+      statusLabel = health.latency != null ? `在线 · ${health.latency} ms` : '在线';
     } else {
       statusClass = 'offline';
       statusLabel = '不可用';
@@ -411,15 +434,19 @@ function renderCardHtml(project) {
   const safeTitleAttr = escapeAttribute(title);
   const safeUrl = escapeAttribute(targetUrl);
   const safeIcon = escapeAttribute(iconSrc);
+  const safeHost = escapeHtml(hostname);
 
   return `
-    <div class="project-card" data-id="${safeId}" data-url="${safeUrl}">
+    <div class="project-card" data-id="${safeId}" data-url="${safeUrl}" tabindex="0" role="link">
       <div class="card-top">
         <div class="card-identity">
           <div class="card-icon-box">
-            <img src="${safeIcon}" alt="${safeTitleAttr}" class="card-favicon-img" loading="eager" decoding="async" onerror="this.onerror=null;this.src='/favicon.svg';" />
+            <img src="${safeIcon}" alt="${safeTitleAttr}" width="28" height="28" class="card-favicon-img" loading="eager" decoding="async" onerror="this.onerror=null;this.src='/favicon.svg';" />
           </div>
-          <div class="card-title" title="${safeTitleAttr}">${safeTitle}</div>
+          <div class="card-text">
+            <div class="card-title" title="${safeTitleAttr}">${safeTitle}</div>
+            ${hostname ? `<div class="card-hostname">${safeHost}</div>` : ''}
+          </div>
         </div>
         <div class="card-status-badge ${statusClass}" id="status-${safeId}">
           <span class="status-dot"></span>
@@ -666,6 +693,7 @@ async function resolveProbeJobs(body) {
     jobs.push({ id, url, trusted });
   };
 
+  // 仅 ids：读取服务端可信配置（供运维/兼容）；浏览器自定义探测应走 items
   if (Array.isArray(body.ids)) {
     for (const id of body.ids.slice(0, MAX_BATCH_SIZE)) {
       const project = trustedMap.get(id);
@@ -681,14 +709,17 @@ async function resolveProbeJobs(body) {
       const id = item.id;
       if (!isValidId(id) || seen.has(id)) continue;
 
-      const trusted = trustedMap.get(id);
-      if (trusted?.customWanUrl) {
-        pushJob(id, trusted.customWanUrl, true);
+      const serverProject = trustedMap.get(id);
+      const clientUrl = typeof item.url === 'string' ? item.url : '';
+
+      // 可信要求：id 相同且 URL 与服务端配置完全一致
+      if (serverProject?.customWanUrl && clientUrl && urlsMatch(serverProject.customWanUrl, clientUrl)) {
+        pushJob(id, serverProject.customWanUrl, true);
         continue;
       }
 
-      if (typeof item.url === 'string') {
-        pushJob(id, item.url, false);
+      if (clientUrl) {
+        pushJob(id, clientUrl, false);
       }
     }
   }
@@ -732,8 +763,14 @@ const server = http.createServer(async (req, res) => {
       return;
     }
 
-    // 批量健康探针：优先使用服务端可信项目 ID，自定义 URL 必须经过 SSRF 校验
+    // 批量探针：items 中仅当 id+url 与服务端配置一致才 trusted；否则 SSRF 校验
     if (pathname === '/api/ping-batch' && req.method === 'POST') {
+      const ip = getClientIp(req);
+      if (!checkRateLimit(ip)) {
+        sendJson(res, 429, { error: 'RATE_LIMITED' });
+        return;
+      }
+
       let body;
       try {
         body = await parseJsonBody(req);
@@ -749,7 +786,7 @@ const server = http.createServer(async (req, res) => {
       const jobs = await resolveProbeJobs(body || {});
       const results = {};
 
-      await mapPool(jobs, PROBE_CONCURRENCY, async (job) => {
+      await mapPool(jobs, BATCH_PROBE_CONCURRENCY, async (job) => {
         const probeResult = await probeHttpEndpoint(job.url, {
           timeoutMs: 3000,
           trusted: job.trusted
@@ -762,7 +799,7 @@ const server = http.createServer(async (req, res) => {
           lastChecked: Date.now()
         };
         results[job.id] = entry;
-        if (job.trusted || entry.alive || entry.error !== 'BLOCKED_IP') {
+        if (job.trusted) {
           setHealthCache(job.id, entry);
         }
       });
@@ -771,25 +808,39 @@ const server = http.createServer(async (req, res) => {
       return;
     }
 
+    // 只读取后台 HEALTH_CACHE，不在每次浏览器轮询时触发新一轮外连探测
     if (pathname === '/api/ping-all' && req.method === 'GET') {
       pruneHealthCache();
       const output = {};
       for (const [key, value] of HEALTH_CACHE.entries()) {
         output[key] = value;
       }
-      runBackgroundHealthCheck();
+      if (HEALTH_CACHE.size === 0) {
+        runBackgroundHealthCheck();
+      }
       sendJson(res, 200, output);
       return;
     }
 
-    // 单服务探针：优先 id（可信配置）；url 参数必须通过 SSRF 校验
+    // 单服务探针：id+url 与配置一致 → trusted；否则仅允许校验后的 url
     if (pathname === '/api/ping' && req.method === 'GET') {
+      const ip = getClientIp(req);
+      if (!checkRateLimit(ip)) {
+        sendJson(res, 429, { error: 'RATE_LIMITED' });
+        return;
+      }
+
       const id = parsedUrl.searchParams.get('id');
       const targetUrl = parsedUrl.searchParams.get('url');
 
-      if (id && isValidId(id)) {
+      if (id && isValidId(id) && targetUrl) {
         const project = getTrustedProjectMap().get(id);
-        if (project?.customWanUrl) {
+        if (project?.customWanUrl && urlsMatch(project.customWanUrl, targetUrl)) {
+          const cached = HEALTH_CACHE.get(id);
+          if (cached && Date.now() - (cached.lastChecked || 0) < 8000) {
+            sendJson(res, 200, cached);
+            return;
+          }
           const httpResult = await probeHttpEndpoint(project.customWanUrl, {
             timeoutMs: 3000,
             trusted: true

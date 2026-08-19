@@ -5,21 +5,34 @@ import { getGreeting } from '../shared/greeting.js';
 import { getProjectNativeFavicon } from '../shared/favicon.js';
 import { isValidHttpUrl, parseHttpUrl } from '../shared/url.js';
 
-const STORAGE_KEY = 'SCHRODINGER_PORTAL_V18';
+const STORAGE_KEY = 'SCHRODINGER_PORTAL';
+const LEGACY_STORAGE_KEY = 'SCHRODINGER_PORTAL_V18';
+const SCHEMA_VERSION = 1;
+
+const faviconCache = new Map();
+
+function cachedFavicon(url) {
+  if (!url) return '/favicon.svg';
+  if (faviconCache.has(url)) return faviconCache.get(url);
+  const icon = getProjectNativeFavicon(url);
+  faviconCache.set(url, icon);
+  return icon;
+}
 
 export { getProjectNativeFavicon };
 
-/**
- * 薛定谔的项目 · 主应用逻辑
- */
 class App {
   constructor() {
     this.ssrProjects = null;
-    this.trustedIds = new Set();
+    this.trustedUrlById = new Map();
     this.loadState();
     this.searchQuery = '';
     this.selectedSearchResultIndex = 0;
     this.searchResults = [];
+    this.poolDelegated = false;
+    this.clockTimer = null;
+    this.lastFocusedBeforeModal = null;
+    this.subtitleRevealed = false;
 
     this.pingService = new PingService((statusMap) => {
       this.statusMap = statusMap;
@@ -32,7 +45,7 @@ class App {
   }
 
   /* -------------------------------------------------------------------------- */
-  /* 数据持久化：config/projects.json(SSR) = 默认；localStorage = 浏览器覆盖     */
+  /* Persistence                                                                */
   /* -------------------------------------------------------------------------- */
 
   loadState() {
@@ -45,15 +58,29 @@ class App {
           ssrProjects = parsed;
         }
       } catch {
-        // 容错
+        // ignore
       }
     }
 
     this.ssrProjects = ssrProjects;
-    this.trustedIds = new Set((ssrProjects || DEFAULT_CONFIG.projects).map((p) => p.id));
+    this.trustedUrlById = new Map();
+    for (const project of ssrProjects || DEFAULT_CONFIG.projects) {
+      if (project?.id && project?.customWanUrl) {
+        const parsed = parseHttpUrl(project.customWanUrl);
+        if (parsed) this.trustedUrlById.set(project.id, parsed.href);
+      }
+    }
 
     try {
-      const saved = localStorage.getItem(STORAGE_KEY);
+      let saved = localStorage.getItem(STORAGE_KEY);
+      if (!saved) {
+        const legacy = localStorage.getItem(LEGACY_STORAGE_KEY);
+        if (legacy) {
+          saved = legacy;
+          localStorage.setItem(STORAGE_KEY, legacy);
+        }
+      }
+
       if (saved) {
         this.config = JSON.parse(saved);
         if (!this.config.projects || this.config.projects.length === 0) {
@@ -62,17 +89,16 @@ class App {
         if (!this.config.profile) this.config.profile = DEFAULT_CONFIG.profile;
         if (!this.config.settings) this.config.settings = DEFAULT_CONFIG.settings;
         this.config.categories = DEFAULT_CONFIG.categories;
+        this.config.schemaVersion = SCHEMA_VERSION;
       } else {
         this.config = JSON.parse(JSON.stringify(DEFAULT_CONFIG));
-        if (ssrProjects) {
-          this.config.projects = ssrProjects;
-        }
+        this.config.schemaVersion = SCHEMA_VERSION;
+        if (ssrProjects) this.config.projects = ssrProjects;
       }
     } catch {
       this.config = JSON.parse(JSON.stringify(DEFAULT_CONFIG));
-      if (ssrProjects) {
-        this.config.projects = ssrProjects;
-      }
+      this.config.schemaVersion = SCHEMA_VERSION;
+      if (ssrProjects) this.config.projects = ssrProjects;
     }
 
     if (!this.config.settings.theme) {
@@ -80,14 +106,19 @@ class App {
     }
   }
 
-  saveState() {
+  persistState() {
+    this.config.schemaVersion = SCHEMA_VERSION;
     localStorage.setItem(STORAGE_KEY, JSON.stringify(this.config));
-    this.render();
   }
 
-  /**
-   * SSR DOM 与当前配置是否一致（比较 id、顺序、url，避免仅比数量导致错位）
-   */
+  isTrustedProject(project, url) {
+    if (!project?.id || !url) return false;
+    const canonical = this.trustedUrlById.get(project.id);
+    if (!canonical) return false;
+    const parsed = parseHttpUrl(url);
+    return Boolean(parsed && parsed.href === canonical);
+  }
+
   ssrDomMatchesConfig() {
     const existingCards = document.querySelectorAll('.project-card');
     const projects = this.config.projects;
@@ -102,27 +133,33 @@ class App {
   }
 
   /* -------------------------------------------------------------------------- */
-  /* 初始化                                                                     */
+  /* Init                                                                       */
   /* -------------------------------------------------------------------------- */
 
   async init() {
     const themeParam = new URLSearchParams(window.location.search).get('theme');
+    const bootstrapped = document.documentElement.getAttribute('data-theme');
     const initialTheme =
       themeParam && ['light', 'dark', 'auto'].includes(themeParam)
         ? themeParam
-        : this.config.settings.theme || 'light';
-    this.applyTheme(initialTheme);
-    await this.pingService.checkBackend();
+        : this.config.settings.theme || bootstrapped || 'light';
+    this.applyTheme(initialTheme, { persist: false });
 
+    await this.pingService.checkBackend();
     this.bindEvents();
+    this.ensurePoolDelegation();
     this.startClock();
+    this.setupVisibilityHandling();
+    this.revealSubtitleOnce();
+    this.updateSearchShortcutLabel();
 
     if (this.ssrDomMatchesConfig()) {
-      this.bindCardEvents();
       this.bindRefreshBtn();
       this.renderMetrics();
+      this.enhanceExistingCards();
     } else {
-      this.render();
+      this.renderProjectPool();
+      this.renderHeader();
     }
 
     if (this.config.settings.autoPing) {
@@ -130,13 +167,39 @@ class App {
         () => this.config.projects,
         (project) => this.buildProjectUrl(project),
         this.config.settings.pingIntervalSeconds || 20,
-        () => ({ trustedIds: this.trustedIds })
+        () => ({
+          isTrusted: (project, url) => this.isTrustedProject(project, url)
+        })
       );
     }
   }
 
+  enhanceExistingCards() {
+    document.querySelectorAll('.project-card').forEach((card, index) => {
+      card.tabIndex = 0;
+      card.setAttribute('role', 'link');
+      card.style.animationDelay = `${Math.min(index * 28, 200)}ms`;
+      if (!card.querySelector('.card-hostname')) {
+        const project = this.config.projects.find((p) => p.id === card.getAttribute('data-id'));
+        if (!project) return;
+        const host = this.getHostname(this.buildProjectUrl(project));
+        const titleEl = card.querySelector('.card-title');
+        if (titleEl && host) {
+          const wrap = document.createElement('div');
+          wrap.className = 'card-text';
+          titleEl.replaceWith(wrap);
+          wrap.appendChild(titleEl);
+          const hostEl = document.createElement('div');
+          hostEl.className = 'card-hostname';
+          hostEl.textContent = host;
+          wrap.appendChild(hostEl);
+        }
+      }
+    });
+  }
+
   /* -------------------------------------------------------------------------- */
-  /* 工具方法                                                                   */
+  /* Helpers                                                                    */
   /* -------------------------------------------------------------------------- */
 
   buildProjectUrl(project) {
@@ -153,6 +216,14 @@ class App {
     return isValidHttpUrl(candidate) ? candidate : '';
   }
 
+  getHostname(url) {
+    try {
+      return new URL(url).hostname;
+    } catch {
+      return '';
+    }
+  }
+
   openSafeUrl(url) {
     if (!isValidHttpUrl(url)) {
       this.showToast('链接无效，已拦截不安全地址', '⚠️');
@@ -161,39 +232,67 @@ class App {
     window.open(url, '_blank', 'noopener,noreferrer');
   }
 
-  applyTheme(theme) {
+  applyTheme(theme, { persist = true } = {}) {
     document.documentElement.setAttribute('data-theme', theme);
     this.config.settings.theme = theme;
     document.querySelectorAll('.theme-option').forEach((btn) => {
       btn.classList.toggle('active', btn.getAttribute('data-theme-val') === theme);
     });
+    if (persist) this.persistState();
   }
 
   showToast(message, icon = '✨') {
     const container = document.getElementById('toastContainer');
     if (!container) return;
-
     const toast = document.createElement('div');
     toast.className = 'toast';
-
     const iconSpan = document.createElement('span');
     iconSpan.textContent = icon;
     const messageSpan = document.createElement('span');
     messageSpan.textContent = message;
     toast.append(iconSpan, document.createTextNode(' '), messageSpan);
-
     container.appendChild(toast);
-
     setTimeout(() => {
       toast.style.opacity = '0';
       toast.style.transform = 'translateY(-8px)';
-      toast.style.transition = 'all 0.22s ease';
+      toast.style.transition = 'opacity 0.22s ease, transform 0.22s ease';
       setTimeout(() => toast.remove(), 220);
     }, 2200);
   }
 
+  prefersReducedMotion() {
+    return window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  }
+
+  revealSubtitleOnce() {
+    if (this.subtitleRevealed) return;
+    const el = document.getElementById('headerSubtitle');
+    if (!el) return;
+    const text = el.textContent || '';
+    if (this.prefersReducedMotion()) {
+      this.subtitleRevealed = true;
+      return;
+    }
+    el.textContent = '';
+    [...text].forEach((ch, index) => {
+      const span = document.createElement('span');
+      span.className = 'reveal-char';
+      span.textContent = ch === ' ' ? '\u00A0' : ch;
+      span.style.animationDelay = `${index * 32}ms`;
+      el.appendChild(span);
+    });
+    this.subtitleRevealed = true;
+  }
+
+  updateSearchShortcutLabel() {
+    const kbd = document.querySelector('#searchTriggerBtn .kbd-badge');
+    if (!kbd) return;
+    const isMac = /Mac|iPhone|iPad|iPod/i.test(navigator.platform || navigator.userAgent || '');
+    kbd.textContent = isMac ? '⌘ K' : 'Ctrl K';
+  }
+
   /* -------------------------------------------------------------------------- */
-  /* 时钟与问候                                                                 */
+  /* Clock / Visibility                                                         */
   /* -------------------------------------------------------------------------- */
 
   startClock() {
@@ -211,7 +310,6 @@ class App {
         const days = ['星期日', '星期一', '星期二', '星期三', '星期四', '星期五', '星期六'];
         clockDate.textContent = `${now.getFullYear()}年${now.getMonth() + 1}月${now.getDate()}日 ${days[now.getDay()]}`;
       }
-
       if (greetingText && greetingIcon) {
         const { greeting, icon } = getGreeting(hours);
         greetingText.textContent = greeting;
@@ -220,26 +318,41 @@ class App {
     };
 
     update();
-    setInterval(update, 1000);
+    this.clockTimer = setInterval(update, 1000);
+  }
+
+  setupVisibilityHandling() {
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'hidden') {
+        this.pingService.pause();
+        if (this.clockTimer) {
+          clearInterval(this.clockTimer);
+          this.clockTimer = null;
+        }
+      } else {
+        const now = new Date();
+        const clockTime = document.getElementById('clockTime');
+        if (clockTime) clockTime.textContent = now.toTimeString().split(' ')[0];
+        this.startClock();
+        this.pingService.resume();
+      }
+    });
   }
 
   /* -------------------------------------------------------------------------- */
-  /* 渲染                                                                       */
+  /* Render                                                                     */
   /* -------------------------------------------------------------------------- */
-
-  render() {
-    this.renderHeader();
-    this.renderProjectPool();
-    this.renderMetrics();
-  }
 
   renderHeader() {
     const p = this.config.profile;
     const headerTitle = document.getElementById('headerTitle');
     const headerSubtitle = document.getElementById('headerSubtitle');
-
     if (headerTitle) headerTitle.textContent = p.title || '薛定谔的项目';
-    if (headerSubtitle) headerSubtitle.textContent = p.subtitle || '心之所向，触手可及';
+    if (headerSubtitle) {
+      headerSubtitle.textContent = p.subtitle || '心之所向，触手可及';
+      this.subtitleRevealed = false;
+      this.revealSubtitleOnce();
+    }
   }
 
   renderMetrics() {
@@ -251,9 +364,7 @@ class App {
       (results.length === pingable.length && results.every((st) => !st.checking));
 
     let onlineCount = 0;
-    if (allDone) {
-      onlineCount = results.filter((st) => st.alive).length;
-    }
+    if (allDone) onlineCount = results.filter((st) => st.alive).length;
 
     const metricTotal = document.getElementById('metricTotal');
     const metricOnline = document.getElementById('metricOnline');
@@ -279,13 +390,12 @@ class App {
     }
 
     const projects = this.config.projects;
-
     pool.innerHTML = `
       <div class="category-section">
         <div class="section-header">
           <div class="section-header-inline">
             <h2 class="sec-name">服务列表</h2>
-            <button class="section-refresh-btn" id="refreshPingBtn" title="重新探测服务状态">
+            <button class="section-refresh-btn" id="refreshPingBtn" title="重新探测服务状态" type="button">
               <svg class="btn-svg spin-on-click" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <path d="M23 4v6h-6M1 20v-6h6"></path>
                 <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
@@ -302,12 +412,11 @@ class App {
           </div>
         </div>
         <div class="cards-grid">
-          ${projects.map((p) => this.renderProjectCard(p)).join('')}
+          ${projects.map((p, index) => this.renderProjectCard(p, index)).join('')}
         </div>
       </div>
     `;
 
-    this.bindCardEvents();
     this.bindRefreshBtn();
     this.updateStatusBadges();
     this.renderMetrics();
@@ -315,56 +424,60 @@ class App {
 
   bindRefreshBtn() {
     const refreshPingBtn = document.getElementById('refreshPingBtn');
-    refreshPingBtn?.addEventListener('click', () => {
+    if (!refreshPingBtn || refreshPingBtn.dataset.bound === '1') return;
+    refreshPingBtn.dataset.bound = '1';
+    refreshPingBtn.addEventListener('click', () => {
       const svg = refreshPingBtn.querySelector('.spin-on-click');
       svg?.classList.add('spinning');
-      this.showToast('正在探测各服务可用性...', '⚡');
+      this.showToast('正在同步服务状态...', '⚡');
       this.pingService
         .probeAll(this.config.projects, (p) => this.buildProjectUrl(p), {
-          trustedIds: this.trustedIds
+          isTrusted: (project, url) => this.isTrustedProject(project, url)
         })
-        .then(() => {
-          setTimeout(() => svg?.classList.remove('spinning'), 500);
-        });
+        .then(() => setTimeout(() => svg?.classList.remove('spinning'), 500));
     });
   }
 
-  renderProjectCard(project) {
+  renderProjectCard(project, index = 0) {
     const targetUrl = this.buildProjectUrl(project);
     const href = targetUrl || '#';
-    const nativeFaviconUrl = getProjectNativeFavicon(targetUrl);
+    const nativeFaviconUrl = cachedFavicon(targetUrl);
     const title = project.title || '未命名服务';
+    const host = this.getHostname(targetUrl);
+    const delay = Math.min(index * 28, 200);
 
     return `
-      <div class="project-card" data-id="${escapeAttribute(project.id)}" data-url="${escapeAttribute(href)}">
+      <div class="project-card" data-id="${escapeAttribute(project.id)}" data-url="${escapeAttribute(href)}" tabindex="0" role="link" style="animation-delay:${delay}ms">
         <div class="card-top">
           <div class="card-identity">
             <div class="card-icon-box">
-              <img src="${escapeAttribute(nativeFaviconUrl)}" alt="${escapeAttribute(title)}" class="card-favicon-img" onerror="this.onerror=null;this.src='/favicon.svg';" />
+              <img src="${escapeAttribute(nativeFaviconUrl)}" alt="${escapeAttribute(title)}" width="28" height="28" class="card-favicon-img" onerror="this.onerror=null;this.src='/favicon.svg';" />
             </div>
-            <div class="card-title" title="${escapeAttribute(title)}">${escapeHtml(title)}</div>
+            <div class="card-text">
+              <div class="card-title" title="${escapeAttribute(title)}">${escapeHtml(title)}</div>
+              ${host ? `<div class="card-hostname">${escapeHtml(host)}</div>` : ''}
+            </div>
           </div>
           <div class="card-status-badge checking" id="status-${escapeAttribute(project.id)}">
             <span class="status-dot"></span>
             <span class="status-text">检测中</span>
           </div>
         </div>
-
         <div class="card-footer">
           <div class="card-manage-actions">
-            <button class="card-action-btn copy-btn" data-url="${escapeAttribute(href)}" title="复制直达链接">
+            <button class="card-action-btn copy-btn" data-url="${escapeAttribute(href)}" title="复制直达链接" type="button">
               <svg class="btn-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
                 <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
               </svg>
             </button>
-            <button class="card-action-btn edit-btn" data-id="${escapeAttribute(project.id)}" title="编辑服务">
+            <button class="card-action-btn edit-btn" data-id="${escapeAttribute(project.id)}" title="编辑服务" type="button">
               <svg class="btn-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
                 <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
               </svg>
             </button>
-            <button class="card-action-btn delete-btn" data-id="${escapeAttribute(project.id)}" title="删除服务">
+            <button class="card-action-btn delete-btn" data-id="${escapeAttribute(project.id)}" title="删除服务" type="button">
               <svg class="btn-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <polyline points="3 6 5 6 21 6"></polyline>
                 <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
@@ -388,7 +501,6 @@ class App {
     this.config.projects.forEach((proj) => {
       const el = document.getElementById(`status-${proj.id}`);
       if (!el) return;
-
       const st = this.statusMap[proj.id];
       if (!st || !proj.pingEnabled) {
         el.className = 'card-status-badge';
@@ -403,7 +515,7 @@ class App {
         if (textEl) textEl.textContent = '检测中';
       } else if (st.alive) {
         el.className = 'card-status-badge online';
-        const msText = st.latency ? ` ${st.latency}ms` : '';
+        const msText = st.latency != null ? ` · ${st.latency} ms` : '';
         if (textEl) textEl.textContent = `在线${msText}`;
       } else {
         el.className = 'card-status-badge offline';
@@ -413,8 +525,71 @@ class App {
   }
 
   /* -------------------------------------------------------------------------- */
-  /* 事件                                                                       */
+  /* Events                                                                     */
   /* -------------------------------------------------------------------------- */
+
+  ensurePoolDelegation() {
+    if (this.poolDelegated) return;
+    const pool = document.getElementById('projectPool');
+    if (!pool) return;
+    this.poolDelegated = true;
+
+    pool.addEventListener('click', (e) => {
+      const copyBtn = e.target.closest('.copy-btn');
+      if (copyBtn) {
+        e.preventDefault();
+        e.stopPropagation();
+        const url = copyBtn.getAttribute('data-url');
+        if (url && isValidHttpUrl(url)) {
+          navigator.clipboard.writeText(url).then(() => this.showToast('已复制直达链接', '📋'));
+        } else {
+          this.showToast('链接无效，无法复制', '⚠️');
+        }
+        return;
+      }
+
+      const editBtn = e.target.closest('.edit-btn');
+      if (editBtn) {
+        e.preventDefault();
+        e.stopPropagation();
+        this.openProjectModal(editBtn.getAttribute('data-id'));
+        return;
+      }
+
+      const deleteBtn = e.target.closest('.delete-btn');
+      if (deleteBtn) {
+        e.preventDefault();
+        e.stopPropagation();
+        const id = deleteBtn.getAttribute('data-id');
+        const proj = this.config.projects.find((p) => p.id === id);
+        if (confirm(`确定要移除服务「${proj ? proj.title : id}」吗？`)) {
+          this.config.projects = this.config.projects.filter((p) => p.id !== id);
+          delete this.statusMap[id];
+          this.persistState();
+          this.renderProjectPool();
+          this.showToast('服务已移除', '🗑️');
+        }
+        return;
+      }
+
+      if (e.target.closest('a, button')) return;
+
+      const card = e.target.closest('.project-card');
+      if (!card) return;
+      const url = card.getAttribute('data-url');
+      if (url && url !== '#') this.openSafeUrl(url);
+    });
+
+    pool.addEventListener('keydown', (e) => {
+      const card = e.target.closest('.project-card');
+      if (!card || e.target.closest('a, button')) return;
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        const url = card.getAttribute('data-url');
+        if (url && url !== '#') this.openSafeUrl(url);
+      }
+    });
+  }
 
   bindEvents() {
     const themeBtn = document.getElementById('themeBtn');
@@ -424,15 +599,12 @@ class App {
       themeMenu.classList.toggle('show');
     });
 
-    document.addEventListener('click', () => {
-      themeMenu?.classList.remove('show');
-    });
+    document.addEventListener('click', () => themeMenu?.classList.remove('show'));
 
     document.querySelectorAll('.theme-option').forEach((opt) => {
       opt.addEventListener('click', () => {
         const t = opt.getAttribute('data-theme-val');
         this.applyTheme(t);
-        this.saveState();
         this.showToast(`已切换主题为「${opt.textContent.trim()}」`, '🎨');
       });
     });
@@ -442,30 +614,20 @@ class App {
         e.preventDefault();
         this.openSearchModal();
       }
-      if (e.key === 'Escape') {
-        this.closeAllModals();
-      }
+      if (e.key === 'Escape') this.closeAllModals();
     });
 
     document.querySelectorAll('.modal-overlay').forEach((overlay) => {
       overlay.addEventListener('click', (e) => {
-        if (e.target === overlay) {
-          this.closeAllModals();
-        }
+        if (e.target === overlay) this.closeAllModals();
       });
     });
 
-    document.getElementById('searchTriggerBtn')?.addEventListener('click', () => {
-      this.openSearchModal();
-    });
-    document.getElementById('closeSearchKbdBtn')?.addEventListener('click', () => {
-      this.closeSearchModal();
-    });
-
+    document.getElementById('searchTriggerBtn')?.addEventListener('click', () => this.openSearchModal());
+    document.getElementById('closeSearchKbdBtn')?.addEventListener('click', () => this.closeSearchModal());
     document.getElementById('addProjectBtn')?.addEventListener('click', () => this.openProjectModal());
     document.getElementById('closeProjectModalBtn')?.addEventListener('click', () => this.closeProjectModal());
     document.getElementById('cancelProjectBtn')?.addEventListener('click', () => this.closeProjectModal());
-
     document.getElementById('settingsBtn')?.addEventListener('click', () => this.openSettingsModal());
     document.getElementById('closeSettingsModalBtn')?.addEventListener('click', () => this.closeSettingsModal());
     document.getElementById('cancelSettingsBtn')?.addEventListener('click', () => this.closeSettingsModal());
@@ -477,72 +639,38 @@ class App {
     });
 
     const searchInput = document.getElementById('paletteSearchInput');
-    searchInput?.addEventListener('input', (e) => {
-      this.handleSearchInput(e.target.value);
-    });
-    searchInput?.addEventListener('keydown', (e) => {
-      this.handleSearchKeydown(e);
-    });
-  }
-
-  bindCardEvents() {
-    document.querySelectorAll('.project-card').forEach((card) => {
-      card.addEventListener('click', (e) => {
-        if (e.target.closest('.card-manage-actions')) return;
-        const url = card.getAttribute('data-url');
-        if (url && url !== '#') this.openSafeUrl(url);
-      });
-    });
-
-    document.querySelectorAll('.copy-btn').forEach((btn) => {
-      btn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        const url = btn.getAttribute('data-url');
-        if (url && isValidHttpUrl(url)) {
-          navigator.clipboard.writeText(url).then(() => {
-            this.showToast('已复制直达链接', '📋');
-          });
-        } else {
-          this.showToast('链接无效，无法复制', '⚠️');
-        }
-      });
-    });
-
-    document.querySelectorAll('.edit-btn').forEach((btn) => {
-      btn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        const id = btn.getAttribute('data-id');
-        this.openProjectModal(id);
-      });
-    });
-
-    document.querySelectorAll('.delete-btn').forEach((btn) => {
-      btn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        const id = btn.getAttribute('data-id');
-        const proj = this.config.projects.find((p) => p.id === id);
-        if (confirm(`确定要移除服务「${proj ? proj.title : id}」吗？`)) {
-          this.config.projects = this.config.projects.filter((p) => p.id !== id);
-          delete this.statusMap[id];
-          this.saveState();
-          this.showToast('服务已移除', '🗑️');
-        }
-      });
-    });
+    searchInput?.addEventListener('input', (e) => this.handleSearchInput(e.target.value));
+    searchInput?.addEventListener('keydown', (e) => this.handleSearchKeydown(e));
   }
 
   /* -------------------------------------------------------------------------- */
-  /* 添加 / 编辑                                                                */
+  /* Modals                                                                     */
   /* -------------------------------------------------------------------------- */
+
+  openOverlay(overlayId, focusSelector) {
+    this.lastFocusedBeforeModal = document.activeElement;
+    const modal = document.getElementById(overlayId);
+    modal?.classList.add('active');
+    modal?.setAttribute('aria-modal', 'true');
+    modal?.setAttribute('role', 'dialog');
+    setTimeout(() => {
+      const focusEl = modal?.querySelector(focusSelector);
+      focusEl?.focus();
+    }, 30);
+  }
+
+  closeOverlay(overlayId) {
+    document.getElementById(overlayId)?.classList.remove('active');
+    if (this.lastFocusedBeforeModal && typeof this.lastFocusedBeforeModal.focus === 'function') {
+      this.lastFocusedBeforeModal.focus();
+    }
+  }
 
   openProjectModal(projectId = null) {
-    const modal = document.getElementById('projectModalOverlay');
     const titleEl = document.getElementById('projectModalTitle');
-
     if (projectId) {
       const proj = this.config.projects.find((p) => p.id === projectId);
       if (!proj) return;
-
       titleEl.textContent = '编辑服务';
       document.getElementById('formProjectId').value = proj.id;
       document.getElementById('formTitle').value = proj.title || '';
@@ -555,12 +683,11 @@ class App {
       document.getElementById('formCustomWan').value = '';
       document.getElementById('formPing').checked = true;
     }
-
-    modal.classList.add('active');
+    this.openOverlay('projectModalOverlay', '#formTitle');
   }
 
   closeProjectModal() {
-    document.getElementById('projectModalOverlay')?.classList.remove('active');
+    this.closeOverlay('projectModalOverlay');
   }
 
   handleProjectFormSubmit() {
@@ -598,38 +725,29 @@ class App {
     }
 
     this.closeProjectModal();
-    this.saveState();
+    this.persistState();
+    this.renderProjectPool();
 
-    const targetUrl = this.buildProjectUrl(projectData);
-    this.pingService.probeService(projectData, targetUrl).then((res) => {
+    this.pingService.probeService(projectData, parsedUrl.href).then((res) => {
       this.statusMap[id] = { checking: false, ...res };
       this.updateStatusBadges();
       this.updateMetrics();
     });
   }
 
-  /* -------------------------------------------------------------------------- */
-  /* 搜索                                                                       */
-  /* -------------------------------------------------------------------------- */
-
   openSearchModal() {
-    const modal = document.getElementById('searchModalOverlay');
+    this.openOverlay('searchModalOverlay', '#paletteSearchInput');
     const input = document.getElementById('paletteSearchInput');
-    modal.classList.add('active');
-    input.value = '';
+    if (input) input.value = '';
     this.handleSearchInput('');
-    setTimeout(() => input.focus(), 50);
   }
 
   closeSearchModal() {
-    document.getElementById('searchModalOverlay')?.classList.remove('active');
+    this.closeOverlay('searchModalOverlay');
   }
 
   handleSearchInput(query) {
     this.searchQuery = query.toLowerCase().trim();
-    const list = document.getElementById('searchResultsList');
-    if (!list) return;
-
     if (!this.searchQuery) {
       this.searchResults = [...this.config.projects];
     } else {
@@ -639,7 +757,6 @@ class App {
         return matchTitle || matchUrl;
       });
     }
-
     this.selectedSearchResultIndex = 0;
     this.renderSearchResults();
   }
@@ -661,14 +778,17 @@ class App {
       .map((proj, idx) => {
         const isSelected = idx === this.selectedSearchResultIndex;
         const targetUrl = this.buildProjectUrl(proj);
-        const nativeFaviconUrl = getProjectNativeFavicon(targetUrl);
+        const nativeFaviconUrl = cachedFavicon(targetUrl);
         const title = proj.title || '未命名服务';
-
+        const host = this.getHostname(targetUrl);
         return `
           <div class="search-result-item ${isSelected ? 'selected' : ''}" data-idx="${idx}">
             <div class="search-result-left">
-              <img src="${escapeAttribute(nativeFaviconUrl)}" alt="${escapeAttribute(title)}" style="width: 20px; height: 20px; object-fit: contain; border-radius: 4px;" onerror="this.onerror=null;this.src='/favicon.svg';" />
-              <div class="search-result-title">${escapeHtml(title)}</div>
+              <img src="${escapeAttribute(nativeFaviconUrl)}" alt="" width="20" height="20" style="width:20px;height:20px;object-fit:contain;border-radius:4px;" onerror="this.onerror=null;this.src='/favicon.svg';" />
+              <div>
+                <div class="search-result-title">${escapeHtml(title)}</div>
+                ${host ? `<div class="search-result-host">${escapeHtml(host)}</div>` : ''}
+              </div>
             </div>
             <span class="kbd-badge">↵ 打开</span>
           </div>
@@ -684,71 +804,60 @@ class App {
     });
   }
 
+  updateSearchSelection(nextIndex) {
+    const list = document.getElementById('searchResultsList');
+    if (!list || this.searchResults.length === 0) return;
+    const items = list.querySelectorAll('.search-result-item');
+    items[this.selectedSearchResultIndex]?.classList.remove('selected');
+    this.selectedSearchResultIndex = nextIndex;
+    const selected = items[this.selectedSearchResultIndex];
+    selected?.classList.add('selected');
+    selected?.scrollIntoView({ block: 'nearest' });
+  }
+
   handleSearchKeydown(e) {
     if (this.searchResults.length === 0) return;
-
     if (e.key === 'ArrowDown') {
       e.preventDefault();
-      this.selectedSearchResultIndex = (this.selectedSearchResultIndex + 1) % this.searchResults.length;
-      this.renderSearchResults();
-      this.scrollSelectedResultIntoView();
+      this.updateSearchSelection((this.selectedSearchResultIndex + 1) % this.searchResults.length);
     } else if (e.key === 'ArrowUp') {
       e.preventDefault();
-      this.selectedSearchResultIndex =
-        (this.selectedSearchResultIndex - 1 + this.searchResults.length) % this.searchResults.length;
-      this.renderSearchResults();
-      this.scrollSelectedResultIntoView();
+      this.updateSearchSelection(
+        (this.selectedSearchResultIndex - 1 + this.searchResults.length) % this.searchResults.length
+      );
     } else if (e.key === 'Enter') {
       e.preventDefault();
       this.launchSearchResult(this.selectedSearchResultIndex);
     }
   }
 
-  scrollSelectedResultIntoView() {
-    const list = document.getElementById('searchResultsList');
-    const selected = list?.querySelector('.search-result-item.selected');
-    if (selected) {
-      selected.scrollIntoView({ block: 'nearest' });
-    }
-  }
-
   launchSearchResult(index) {
     const proj = this.searchResults[index];
     if (!proj) return;
-    const url = this.buildProjectUrl(proj);
-    this.openSafeUrl(url);
+    this.openSafeUrl(this.buildProjectUrl(proj));
     this.closeSearchModal();
   }
 
-  /* -------------------------------------------------------------------------- */
-  /* 设置                                                                       */
-  /* -------------------------------------------------------------------------- */
-
   openSettingsModal() {
-    const modal = document.getElementById('settingsModalOverlay');
     const p = this.config.profile;
-
     const cfgTitle = document.getElementById('cfgTitle');
     const cfgSubtitle = document.getElementById('cfgSubtitle');
-
     if (cfgTitle) cfgTitle.value = p.title || '薛定谔的项目';
     if (cfgSubtitle) cfgSubtitle.value = p.subtitle || '心之所向，触手可及';
-
-    modal?.classList.add('active');
+    this.openOverlay('settingsModalOverlay', '#cfgTitle');
   }
 
   closeSettingsModal() {
-    document.getElementById('settingsModalOverlay')?.classList.remove('active');
+    this.closeOverlay('settingsModalOverlay');
   }
 
   saveSettings() {
     const cfgTitle = document.getElementById('cfgTitle');
     const cfgSubtitle = document.getElementById('cfgSubtitle');
-
     if (cfgTitle) this.config.profile.title = cfgTitle.value.trim() || '薛定谔的项目';
     if (cfgSubtitle) this.config.profile.subtitle = cfgSubtitle.value.trim() || '心之所向，触手可及';
-
-    this.saveState();
+    this.persistState();
+    this.renderHeader();
     this.closeSettingsModal();
     this.showToast('设置已成功保存', '💾');
   }
