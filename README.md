@@ -2,14 +2,23 @@
 
 # 🐱 薛定谔的项目 (Schrödinger's Portal)
 
-**极简 Apple 风格个人服务器导航与服务健康探针面板**
+**轻量 Apple 风格自托管服务导航与健康状态 Portal**
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
 [![Node.js Version](https://img.shields.io/badge/Node.js-18%2B-brightgreen.svg)](https://nodejs.org)
 [![Docker](https://img.shields.io/badge/Docker-Ready-2496ed.svg)](https://www.docker.com/)
-[![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](https://github.com/uncat2310/schrodinger-portal/pulls)
 
 *心之所向，触手可及。*
+
+<br/>
+
+### Light Mode
+
+![Light Mode](docs/screenshots/light.png)
+
+### Dark Mode
+
+![Dark Mode](docs/screenshots/dark.png)
 
 </div>
 
@@ -17,31 +26,27 @@
 
 ## 📖 项目简介
 
-**薛定谔的项目 (Schrödinger's Portal)** 是一款专注于**极致视觉美学**与**高性能秒开**的现代服务器项目主页与服务聚合中枢。
+**薛定谔的项目 (Schrödinger's Portal)** 是一个基于 **Vite + Vanilla JavaScript + Node.js** 的轻量个人服务器导航面板：用 Apple 风格卡片聚合常用服务，并通过服务端健康探针展示连通性与时延。
 
-摒弃了传统 Dashboard 繁复臃肿的图表堆叠，采用类 Apple 原生视觉规范，提供轻巧、纯粹、端正的服务直达与健康状态探测体验。
+适合自托管场景：开箱即用、镜像小、无数据库、无前端框架依赖。
 
 ---
 
 ## ✨ 核心特性
 
-- 🍎 **Apple 极简设计规范**：精心调校的卡片圆角、柔和微弥散阴影与高斯模糊毛玻璃（Frosted Glass）质感。
-- 🌓 **双模主题自动适配**：原生支持明亮白（Apple Light）与极简暗黑（Apple Dark），支持一键跟随系统偏好切换。
-- ⚡ **高性能服务端渲染 (SSR)**：Node.js 服务端首包直出完整 HTML/SVG 骨架，零白屏等待，极致毫秒级响应。
-- 🎯 **真实原生 Favicon 自动抓取**：端到端直连抓取目标站点标签栏原版 Favicon，无需手动输入或维护图标库。
-- 🔍 **Spotlight 聚焦全局搜索**：支持快捷键 `Ctrl + K` / `Cmd + K` 唤起全键盘导航搜索，支持上下键选择与回车直达。
-- 💓 **多端健康探测与毫秒时延**：内置零外部依赖的异步健康探针，自动判断服务状态并在卡片上显示实时连通性与时延。
-- 📱 **深度移动端适配**：针对 iOS 与 Android 移动设备专门优化，适配灵动岛、刘海屏与底部手势安全区。
-- 💾 **无感数据持久化与即时编辑**：支持前端直接添加、修改或删除服务条目，即时同步保存。
-- 🐳 **多环境一键部署**：支持 Docker、Docker Compose、Node.js、PM2 或反向代理快速上线。
+- 🍎 **Apple 极简视觉**：卡片圆角、柔和阴影与毛玻璃顶栏，保留 Light / Dark / Auto 主题。
+- 🧩 **Node.js 首屏预渲染**：服务端在 HTML 中注入项目卡片，降低首屏空白与首次布局等待。
+- 🔍 **Spotlight 搜索**：`Ctrl + K` / `Cmd + K` 唤起，支持键盘导航与回车直达。
+- 💓 **服务端健康探针**：以服务端探测为主；浏览器 `no-cors` 仅作受限 fallback。
+- 🖼️ **自动 Favicon 识别**：常见自建服务走同源已知路径；公开站点使用域名 favicon fallback；失败回退本地图标。
+- 💾 **浏览器本地编辑**：添加 / 编辑 / 删除默认保存在当前浏览器 LocalStorage，不会自动改服务器配置。
+- 🐳 **Docker / Compose / Node / PM2** 多种部署方式。
 
 ---
 
 ## 🚀 快速开始
 
-### 方式一：Docker 一键拉取运行（推荐，免克隆免编译）
-
-只需一条 Docker 命令即可瞬时启动：
+### 方式一：Docker 一键拉取（推荐）
 
 ```bash
 docker run -d \
@@ -51,44 +56,30 @@ docker run -d \
   ghcr.io/uncat2310/schrodinger-portal:latest
 ```
 
-启动后直接访问 `http://你的服务器IP:3000` 即可！
+访问 `http://你的服务器IP:3000`。
 
----
+### 方式二：Docker Compose
 
-### 方式二：Docker Compose 一键启动
-
-1. 克隆代码仓库：
 ```bash
 git clone https://github.com/uncat2310/schrodinger-portal.git
 cd schrodinger-portal
-```
-
-2. 启动容器：
-```bash
 docker compose up -d
 ```
 
----
+说明：`docker-compose.yml` 同时声明了 `image` 与 `build`。正式部署会优先使用 GHCR 镜像；本地也可 `docker compose build` 自行构建。
 
-### 方式三：Node.js 本地 / 服务器运行
+### 方式三：Node.js
 
-#### 运行环境要求
-- **Node.js**: 18.0.0 或更高版本
-- **NPM** 或 **PNPM** / **Yarn**
+要求：Node.js 18+。
 
-#### 步骤
-1. 安装依赖并构建：
 ```bash
-npm install
+npm ci
 npm run build
-```
-
-2. 启动生产服务：
-```bash
 npm start
 ```
 
-3. （可选）使用 PM2 在后台常驻运行：
+可选 PM2：
+
 ```bash
 npm install -g pm2
 pm2 start server.js --name "schrodinger-portal"
@@ -97,48 +88,202 @@ pm2 save
 
 ---
 
+## ⚙️ 配置
+
+### 服务端默认项目
+
+优先读取：
+
+```text
+config/projects.json
+```
+
+该文件已在 `.gitignore` / `.dockerignore` 中忽略，用于存放你自己的服务列表（可含内网地址）。公开仓库请使用示例文件：
+
+```bash
+mkdir -p config
+cp config/projects.example.json config/projects.json
+```
+
+示例仅包含 `github.com` / `vercel.com` / `cloudflare.com` 等公开站点。
+
+Docker 挂载示例：
+
+```bash
+docker run -d \
+  --name schrodinger-portal \
+  --restart unless-stopped \
+  -p 3000:3000 \
+  -v "$PWD/config/projects.json:/app/config/projects.json:ro" \
+  ghcr.io/uncat2310/schrodinger-portal:latest
+```
+
+### 环境变量
+
+| 变量 | 默认 | 说明 |
+| :--- | :--- | :--- |
+| `PORT` | `3000` | 监听端口 |
+| `CORS_ORIGIN` | 空 | 默认同源，不返回 `Access-Control-Allow-Origin: *`；需要跨域时显式设置 |
+| `ALLOW_INSECURE_TLS` | `false` | 为 `true` 时探针才忽略 TLS 证书错误；默认严格校验 |
+
+---
+
+## 💾 数据持久化说明
+
+本项目采用低冲突的双层数据源：
+
+```text
+服务器 config/projects.json（或内置公开 Demo）
+        ↓
+   SSR 首次加载
+
+浏览器内编辑 / 删除 / 排序偏好
+        ↓
+   localStorage（按浏览器隔离）
+```
+
+请明确：
+
+- 页面内编辑**默认只写入当前浏览器 LocalStorage**
+- **不会**自动修改服务器 `config/projects.json`
+- **不会**自动多设备同步
+- 清除站点数据会丢失浏览器侧修改
+- 需要服务端预设时，请手工维护 `config/projects.json`
+
+若 SSR 注入的项目与 LocalStorage 不一致，客户端会按 LocalStorage 重新渲染，避免错位接管。
+
+---
+
+## 💓 健康探针说明
+
+- 主路径：服务端根据可信项目 ID 或经过校验的 URL 发起 HTTP(S) 探测
+- 客户端任意 URL 探测会拒绝 localhost / 私网 / link-local / 云 metadata 等目标（防 SSRF）
+- HTTPS 默认启用证书校验
+- 状态文案：`在线` / `不可用` / `检测中`
+- 浏览器 `no-cors` fallback 只能说明请求可能发出，**不是高精度真实测速**
+
+---
+
+## 🖼️ Favicon 说明
+
+**自动 Favicon 识别**含义是：
+
+- 针对常见自建服务识别原生 favicon 路径
+- 对公开网站使用域名 favicon fallback（如 DuckDuckGo icons）
+- 加载失败回退本地 `/favicon.svg`
+
+当前实现**不会**解析目标站点 HTML 中的 `<link rel="icon">`。第三方 fallback 可能向第三方服务暴露公开 hostname；自建服务优先走同源路径，避免误导为“端到端抓取原版 favicon”。
+
+---
+
+## 🔄 Docker 更新
+
+```bash
+docker pull ghcr.io/uncat2310/schrodinger-portal:latest
+docker stop schrodinger-portal
+docker rm schrodinger-portal
+docker run -d \
+  --name schrodinger-portal \
+  --restart unless-stopped \
+  -p 3000:3000 \
+  ghcr.io/uncat2310/schrodinger-portal:latest
+```
+
+Compose：
+
+```bash
+docker compose pull
+docker compose up -d
+```
+
+---
+
+## 🌐 反向代理示例
+
+### Caddy
+
+```caddy
+portal.example.com {
+    reverse_proxy 127.0.0.1:3000
+}
+```
+
+### Nginx（可选）
+
+```nginx
+server {
+    listen 80;
+    server_name portal.example.com;
+
+    location / {
+        proxy_pass http://127.0.0.1:3000;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+}
+```
+
+---
+
+## 🔐 安全建议
+
+- 建议通过 HTTPS 反向代理对外提供服务
+- 不要把私有 `config/projects.json`、token、密钥提交进公开仓库
+- 探针仅用于 HTTP/HTTPS 健康检查，不要把任意公网实例当作开放 SSRF 入口
+- 暴露在公网时请使用最新镜像 / 最新代码
+
+---
+
 ## 🛠️ 项目结构
 
 ```text
 schrodinger-portal/
-├── public/                 # 静态资源与矢量图标
-│   ├── avatar.jpg          # 默认小猫头像
-│   └── favicon.png         # 浏览器标签 Favicon
+├── public/                      # 静态资源
+│   ├── avatar.jpg               # 默认头像 / Apple Touch Icon
+│   ├── favicon.svg              # 浏览器 Favicon
+│   └── icons/                   # 可选本地图标
+├── config/
+│   └── projects.example.json    # 公开示例配置（复制为 projects.json）
+├── docs/screenshots/            # README 真实界面截图
+├── shared/                      # 前后端共用小工具（转义 / URL / 问候 / favicon）
+├── scripts/                     # 可选运维脚本（如截图）
 ├── src/
-│   ├── data/
-│   │   └── defaultConfig.js # 初始默认服务配置
-│   ├── services/
-│   │   └── pingService.js   # 连通性探针服务
-│   ├── app.js              # 前端交互与状态逻辑
-│   └── style.css           # 纯 Vanilla CSS 设计系统
-├── index.html              # 应用骨架
-├── server.js               # 高性能轻量 Node.js 服务端与探针 API
-├── Dockerfile              # Docker 多阶段构建文件
-├── docker-compose.yml      # 一键容器编排
+│   ├── data/defaultConfig.js    # 前端默认配置
+│   ├── services/pingService.js  # 前端探针客户端
+│   ├── app.js                   # 前端交互与状态
+│   └── style.css                # Vanilla CSS
+├── index.html
+├── server.js                    # 生产静态服务 + SSR + 探针 API
+├── Dockerfile
+├── docker-compose.yml
+├── .dockerignore
 └── README.md
 ```
 
 ---
 
-## ⌨️ 快捷键支持
+## ⌨️ 快捷键
 
 | 快捷键 | 功能 |
 | :--- | :--- |
-| `Ctrl + K` / `Cmd + K` | 呼出 Spotlight 全局服务搜索弹窗 |
-| `↑` / `↓` | 在搜索结果中上下切换选项 |
-| `Enter` | 直接在当前/新标签页打开所选服务 |
-| `ESC` | 关闭当前弹窗或退出搜索 |
+| `Ctrl + K` / `Cmd + K` | 打开 Spotlight 搜索 |
+| `↑` / `↓` | 搜索结果导航 |
+| `Enter` | 打开所选服务 |
+| `ESC` | 关闭弹窗 |
 
 ---
 
 ## 🤝 参与贡献
 
-欢迎提交 Issue 与 Pull Request 共同完善本项目！
+欢迎提交 Issue 与 Pull Request。
 
 1. Fork 本仓库
-2. 创建您的功能分支 (`git checkout -b feature/AmazingFeature`)
-3. 提交您的修改 (`git commit -m 'Add some AmazingFeature'`)
-4. 推送到分支 (`git push origin feature/AmazingFeature`)
+2. 创建分支 (`git checkout -b feature/AmazingFeature`)
+3. 提交修改 (`git commit -m 'Add some AmazingFeature'`)
+4. 推送分支 (`git push origin feature/AmazingFeature`)
 5. 开启 Pull Request
 
 ---

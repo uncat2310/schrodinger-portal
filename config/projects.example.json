@@ -1,0 +1,23 @@
+[
+  {
+    "id": "p-github",
+    "categoryId": "services",
+    "title": "GitHub 代码中枢",
+    "customWanUrl": "https://github.com",
+    "pingEnabled": true
+  },
+  {
+    "id": "p-vercel",
+    "categoryId": "services",
+    "title": "Vercel 部署平台",
+    "customWanUrl": "https://vercel.com",
+    "pingEnabled": true
+  },
+  {
+    "id": "p-cloudflare",
+    "categoryId": "services",
+    "title": "Cloudflare 边缘网络",
+    "customWanUrl": "https://cloudflare.com",
+    "pingEnabled": true
+  }
+]

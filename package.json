@@ -1,5 +1,5 @@
 {
-  "name": "aether-server-portal",
+  "name": "schrodinger-portal",
   "private": true,
   "version": "1.0.0",
   "type": "module",
@@ -7,7 +7,8 @@
     "dev": "vite --port 3000 --host",
     "build": "vite build",
     "preview": "vite preview --port 3000 --host",
-    "start": "node server.js"
+    "start": "node server.js",
+    "check": "npm run build"
   },
   "devDependencies": {
     "vite": "^6.0.0"

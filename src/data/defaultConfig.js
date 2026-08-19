@@ -6,7 +6,7 @@ export const DEFAULT_CONFIG = {
   profile: {
     title: "薛定谔的项目",
     subtitle: "心之所向，触手可及",
-    avatar: "/favicon.png",
+    avatar: "/avatar.jpg",
     wanDomain: "example.com"
   },
   settings: {

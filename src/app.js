@@ -1,43 +1,21 @@
 import { DEFAULT_CONFIG } from './data/defaultConfig.js';
 import { PingService } from './services/pingService.js';
+import { escapeHtml, escapeAttribute } from '../shared/escape.js';
+import { getGreeting } from '../shared/greeting.js';
+import { getProjectNativeFavicon } from '../shared/favicon.js';
+import { isValidHttpUrl, parseHttpUrl } from '../shared/url.js';
 
 const STORAGE_KEY = 'SCHRODINGER_PORTAL_V18';
 
-/**
- * 抓取各目标网站自身的原生标签栏 Favicon 图标
- */
-export function getProjectNativeFavicon(targetUrl) {
-  if (!targetUrl) return '/favicon.png';
-  try {
-    const parsed = new URL(targetUrl);
-    const origin = parsed.origin;
-    const hostname = parsed.hostname;
-
-    // 1. 针对常见已知子服务的原生 Favicon 路径探测
-    if (hostname.includes('traffic')) return `${origin}/favicon.svg`;
-    if (hostname.includes('tz.')) return `${origin}/favicon.ico`;
-    if (hostname.includes('blog.')) return `${origin}/favicon.png`;
-    if (hostname.includes('v.')) return `${origin}/images/favicon-32x32.png`;
-    if (hostname.includes('cd2.')) return `${origin}/public/favicon.png`;
-    if (hostname.includes('img.')) return `${origin}/favicon.png`;
-    if (hostname.includes('catbox.')) return `${origin}/static/catbox-logo.png`;
-    if (hostname.includes('qb.')) return `${origin}/icons/qbittorrent-tray.svg`;
-    if (hostname.includes('github.')) return 'https://icons.duckduckgo.com/ip3/github.com.ico';
-    if (hostname.includes('vercel.')) return 'https://icons.duckduckgo.com/ip3/vercel.com.ico';
-    if (hostname.includes('cloudflare.')) return 'https://icons.duckduckgo.com/ip3/cloudflare.com.ico';
-
-    // 2. 针对外部公开网站
-    return `https://icons.duckduckgo.com/ip3/${hostname}.ico`;
-  } catch {
-    return '/favicon.png';
-  }
-}
+export { getProjectNativeFavicon };
 
 /**
- * 薛定谔的项目 · 主应用逻辑中枢
+ * 薛定谔的项目 · 主应用逻辑
  */
 class App {
   constructor() {
+    this.ssrProjects = null;
+    this.trustedIds = new Set();
     this.loadState();
     this.searchQuery = '';
     this.selectedSearchResultIndex = 0;
@@ -54,11 +32,10 @@ class App {
   }
 
   /* -------------------------------------------------------------------------- */
-  /* 数据持久化与状态管理                                                        */
+  /* 数据持久化：config/projects.json(SSR) = 默认；localStorage = 浏览器覆盖     */
   /* -------------------------------------------------------------------------- */
 
   loadState() {
-    // 优先读取 SSR 服务端预渲染注入的默认项目列表
     let ssrProjects = null;
     const ssrEl = document.getElementById('initial-projects-data');
     if (ssrEl) {
@@ -71,6 +48,9 @@ class App {
         // 容错
       }
     }
+
+    this.ssrProjects = ssrProjects;
+    this.trustedIds = new Set((ssrProjects || DEFAULT_CONFIG.projects).map((p) => p.id));
 
     try {
       const saved = localStorage.getItem(STORAGE_KEY);
@@ -105,20 +85,39 @@ class App {
     this.render();
   }
 
+  /**
+   * SSR DOM 与当前配置是否一致（比较 id、顺序、url，避免仅比数量导致错位）
+   */
+  ssrDomMatchesConfig() {
+    const existingCards = document.querySelectorAll('.project-card');
+    const projects = this.config.projects;
+    if (existingCards.length !== projects.length) return false;
+
+    return [...existingCards].every((card, index) => {
+      const project = projects[index];
+      if (!project) return false;
+      const expectedUrl = this.buildProjectUrl(project) || '';
+      return card.getAttribute('data-id') === project.id && card.getAttribute('data-url') === expectedUrl;
+    });
+  }
+
   /* -------------------------------------------------------------------------- */
-  /* 应用初始化 (无缝接管 SSR 预渲染 DOM)                                       */
+  /* 初始化                                                                     */
   /* -------------------------------------------------------------------------- */
 
   async init() {
-    this.applyTheme(this.config.settings.theme || 'light');
+    const themeParam = new URLSearchParams(window.location.search).get('theme');
+    const initialTheme =
+      themeParam && ['light', 'dark', 'auto'].includes(themeParam)
+        ? themeParam
+        : this.config.settings.theme || 'light';
+    this.applyTheme(initialTheme);
     await this.pingService.checkBackend();
 
     this.bindEvents();
     this.startClock();
-    
-    // 如果 SSR 已经预渲染了服务列表，直接绑定事件并探针，避免闪烁
-    const existingCards = document.querySelectorAll('.project-card');
-    if (existingCards.length === this.config.projects.length) {
+
+    if (this.ssrDomMatchesConfig()) {
       this.bindCardEvents();
       this.bindRefreshBtn();
       this.renderMetrics();
@@ -126,29 +125,40 @@ class App {
       this.render();
     }
 
-    // 启动后台定时健康探测
     if (this.config.settings.autoPing) {
       this.pingService.start(
         () => this.config.projects,
         (project) => this.buildProjectUrl(project),
-        this.config.settings.pingIntervalSeconds || 20
+        this.config.settings.pingIntervalSeconds || 20,
+        () => ({ trustedIds: this.trustedIds })
       );
     }
   }
 
   /* -------------------------------------------------------------------------- */
-  /* 路由与工具方法                                                             */
+  /* 工具方法                                                                   */
   /* -------------------------------------------------------------------------- */
 
   buildProjectUrl(project) {
     if (project.customWanUrl) {
-      return project.customWanUrl;
+      const parsed = parseHttpUrl(project.customWanUrl);
+      return parsed ? parsed.href : '';
     }
     const host = this.config.profile.wanDomain || 'example.com';
     const protocol = project.protocol || 'https';
+    if (protocol !== 'http' && protocol !== 'https') return '';
     const portPart = project.port ? `:${project.port}` : '';
     const pathPart = project.path || '/';
-    return `${protocol}://${host}${portPart}${pathPart}`;
+    const candidate = `${protocol}://${host}${portPart}${pathPart}`;
+    return isValidHttpUrl(candidate) ? candidate : '';
+  }
+
+  openSafeUrl(url) {
+    if (!isValidHttpUrl(url)) {
+      this.showToast('链接无效，已拦截不安全地址', '⚠️');
+      return;
+    }
+    window.open(url, '_blank', 'noopener,noreferrer');
   }
 
   applyTheme(theme) {
@@ -165,7 +175,13 @@ class App {
 
     const toast = document.createElement('div');
     toast.className = 'toast';
-    toast.innerHTML = `<span>${icon}</span> <span>${message}</span>`;
+
+    const iconSpan = document.createElement('span');
+    iconSpan.textContent = icon;
+    const messageSpan = document.createElement('span');
+    messageSpan.textContent = message;
+    toast.append(iconSpan, document.createTextNode(' '), messageSpan);
+
     container.appendChild(toast);
 
     setTimeout(() => {
@@ -177,7 +193,7 @@ class App {
   }
 
   /* -------------------------------------------------------------------------- */
-  /* 动态时钟与全时段精准问候 (清晨/上午/午间/下午/晚上/夜深)                    */
+  /* 时钟与问候                                                                 */
   /* -------------------------------------------------------------------------- */
 
   startClock() {
@@ -197,27 +213,7 @@ class App {
       }
 
       if (greetingText && greetingIcon) {
-        let greeting = '欢迎回来';
-        let icon = '✨';
-        if (hours >= 5 && hours < 9) {
-          greeting = '清晨好，新的一天';
-          icon = '🌅';
-        } else if (hours >= 9 && hours < 12) {
-          greeting = '上午好，专注当下';
-          icon = '☀️';
-        } else if (hours >= 12 && hours < 14) {
-          greeting = '午间好，享受静谧时光';
-          icon = '☕';
-        } else if (hours >= 14 && hours < 18) {
-          greeting = '下午好，保持高效';
-          icon = '💻';
-        } else if (hours >= 18 && hours < 23) {
-          greeting = '晚上好，一切安然有序';
-          icon = '🌙';
-        } else {
-          greeting = '夜深了，系统持续守护';
-          icon = '🌌';
-        }
+        const { greeting, icon } = getGreeting(hours);
         greetingText.textContent = greeting;
         greetingIcon.textContent = icon;
       }
@@ -228,7 +224,7 @@ class App {
   }
 
   /* -------------------------------------------------------------------------- */
-  /* 界面渲染引擎                                                               */
+  /* 渲染                                                                       */
   /* -------------------------------------------------------------------------- */
 
   render() {
@@ -248,26 +244,26 @@ class App {
 
   renderMetrics() {
     const total = this.config.projects.length;
-    let onlineCount = 0;
+    const pingable = this.config.projects.filter((p) => p.pingEnabled);
+    const results = pingable.map((p) => this.statusMap[p.id]).filter(Boolean);
+    const allDone =
+      pingable.length === 0 ||
+      (results.length === pingable.length && results.every((st) => !st.checking));
 
-    this.config.projects.forEach((proj) => {
-      const st = this.statusMap[proj.id];
-      if (st && st.alive) onlineCount++;
-    });
+    let onlineCount = 0;
+    if (allDone) {
+      onlineCount = results.filter((st) => st.alive).length;
+    }
 
     const metricTotal = document.getElementById('metricTotal');
     const metricOnline = document.getElementById('metricOnline');
-    if (metricTotal) metricTotal.textContent = total;
-    if (metricOnline) metricOnline.textContent = onlineCount || total;
+    if (metricTotal) metricTotal.textContent = String(total);
+    if (metricOnline) metricOnline.textContent = allDone ? String(onlineCount) : '—';
   }
 
   updateMetrics() {
     this.renderMetrics();
   }
-
-  /* -------------------------------------------------------------------------- */
-  /* 服务列表头部：标题、刷新、总计与正常运行全部同排紧凑居左                   */
-  /* -------------------------------------------------------------------------- */
 
   renderProjectPool() {
     const pool = document.getElementById('projectPool');
@@ -301,7 +297,7 @@ class App {
             </div>
             <div class="stat-badge">
               <span class="stat-label">运行正常</span>
-              <span class="stat-num online" id="metricOnline">${projects.length}</span>
+              <span class="stat-num online" id="metricOnline">—</span>
             </div>
           </div>
         </div>
@@ -323,57 +319,59 @@ class App {
       const svg = refreshPingBtn.querySelector('.spin-on-click');
       svg?.classList.add('spinning');
       this.showToast('正在探测各服务可用性...', '⚡');
-      this.pingService.probeAll(this.config.projects, (p) => this.buildProjectUrl(p)).then(() => {
-        setTimeout(() => svg?.classList.remove('spinning'), 500);
-      });
+      this.pingService
+        .probeAll(this.config.projects, (p) => this.buildProjectUrl(p), {
+          trustedIds: this.trustedIds
+        })
+        .then(() => {
+          setTimeout(() => svg?.classList.remove('spinning'), 500);
+        });
     });
   }
 
-  /* -------------------------------------------------------------------------- */
-  /* Apple 质感极简卡片渲染 (直接使用目标网站自身的原生 Favicon)                */
-  /* -------------------------------------------------------------------------- */
-
   renderProjectCard(project) {
     const targetUrl = this.buildProjectUrl(project);
+    const href = targetUrl || '#';
     const nativeFaviconUrl = getProjectNativeFavicon(targetUrl);
+    const title = project.title || '未命名服务';
 
     return `
-      <div class="project-card" data-id="${project.id}" data-url="${targetUrl}">
+      <div class="project-card" data-id="${escapeAttribute(project.id)}" data-url="${escapeAttribute(href)}">
         <div class="card-top">
           <div class="card-identity">
             <div class="card-icon-box">
-              <img src="${nativeFaviconUrl}" alt="${project.title}" class="card-favicon-img" onerror="this.onerror=null;this.src='/favicon.png';" />
+              <img src="${escapeAttribute(nativeFaviconUrl)}" alt="${escapeAttribute(title)}" class="card-favicon-img" onerror="this.onerror=null;this.src='/favicon.svg';" />
             </div>
-            <div class="card-title" title="${project.title}">${project.title}</div>
+            <div class="card-title" title="${escapeAttribute(title)}">${escapeHtml(title)}</div>
           </div>
-          <div class="card-status-badge checking" id="status-${project.id}">
+          <div class="card-status-badge checking" id="status-${escapeAttribute(project.id)}">
             <span class="status-dot"></span>
-            <span class="status-text">探针中</span>
+            <span class="status-text">检测中</span>
           </div>
         </div>
 
         <div class="card-footer">
           <div class="card-manage-actions">
-            <button class="card-action-btn copy-btn" data-url="${targetUrl}" title="复制直达链接">
+            <button class="card-action-btn copy-btn" data-url="${escapeAttribute(href)}" title="复制直达链接">
               <svg class="btn-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
                 <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
               </svg>
             </button>
-            <button class="card-action-btn edit-btn" data-id="${project.id}" title="编辑服务">
+            <button class="card-action-btn edit-btn" data-id="${escapeAttribute(project.id)}" title="编辑服务">
               <svg class="btn-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
                 <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
               </svg>
             </button>
-            <button class="card-action-btn delete-btn" data-id="${project.id}" title="删除服务">
+            <button class="card-action-btn delete-btn" data-id="${escapeAttribute(project.id)}" title="删除服务">
               <svg class="btn-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <polyline points="3 6 5 6 21 6"></polyline>
                 <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
               </svg>
             </button>
           </div>
-          <a href="${targetUrl}" target="_blank" rel="noreferrer" class="btn-launch" title="直达打开服务">
+          <a href="${escapeAttribute(href)}" target="_blank" rel="noreferrer" class="btn-launch" title="直达打开服务">
             <span>直达</span>
             <svg class="btn-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path>
@@ -399,26 +397,26 @@ class App {
       }
 
       el.style.display = 'flex';
+      const textEl = el.querySelector('.status-text');
       if (st.checking) {
         el.className = 'card-status-badge checking';
-        el.querySelector('.status-text').textContent = '检测中';
+        if (textEl) textEl.textContent = '检测中';
       } else if (st.alive) {
         el.className = 'card-status-badge online';
         const msText = st.latency ? ` ${st.latency}ms` : '';
-        el.querySelector('.status-text').textContent = `在线${msText}`;
+        if (textEl) textEl.textContent = `在线${msText}`;
       } else {
         el.className = 'card-status-badge offline';
-        el.querySelector('.status-text').textContent = '未启动';
+        if (textEl) textEl.textContent = '不可用';
       }
     });
   }
 
   /* -------------------------------------------------------------------------- */
-  /* 事件绑定与用户交互                                                         */
+  /* 事件                                                                       */
   /* -------------------------------------------------------------------------- */
 
   bindEvents() {
-    // 主题下拉
     const themeBtn = document.getElementById('themeBtn');
     const themeMenu = document.getElementById('themeMenu');
     themeBtn?.addEventListener('click', (e) => {
@@ -439,7 +437,6 @@ class App {
       });
     });
 
-    // 快捷键监听
     document.addEventListener('keydown', (e) => {
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
         e.preventDefault();
@@ -450,7 +447,6 @@ class App {
       }
     });
 
-    // 点击弹窗遮罩外部任意区域直接退出
     document.querySelectorAll('.modal-overlay').forEach((overlay) => {
       overlay.addEventListener('click', (e) => {
         if (e.target === overlay) {
@@ -459,7 +455,6 @@ class App {
       });
     });
 
-    // 搜索入口
     document.getElementById('searchTriggerBtn')?.addEventListener('click', () => {
       this.openSearchModal();
     });
@@ -467,24 +462,20 @@ class App {
       this.closeSearchModal();
     });
 
-    // 添加服务弹窗
     document.getElementById('addProjectBtn')?.addEventListener('click', () => this.openProjectModal());
     document.getElementById('closeProjectModalBtn')?.addEventListener('click', () => this.closeProjectModal());
     document.getElementById('cancelProjectBtn')?.addEventListener('click', () => this.closeProjectModal());
 
-    // 设置弹窗
     document.getElementById('settingsBtn')?.addEventListener('click', () => this.openSettingsModal());
     document.getElementById('closeSettingsModalBtn')?.addEventListener('click', () => this.closeSettingsModal());
     document.getElementById('cancelSettingsBtn')?.addEventListener('click', () => this.closeSettingsModal());
     document.getElementById('saveSettingsBtn')?.addEventListener('click', () => this.saveSettings());
 
-    // 表单提交
     document.getElementById('projectForm')?.addEventListener('submit', (e) => {
       e.preventDefault();
       this.handleProjectFormSubmit();
     });
 
-    // 搜索输入
     const searchInput = document.getElementById('paletteSearchInput');
     searchInput?.addEventListener('input', (e) => {
       this.handleSearchInput(e.target.value);
@@ -499,7 +490,7 @@ class App {
       card.addEventListener('click', (e) => {
         if (e.target.closest('.card-manage-actions')) return;
         const url = card.getAttribute('data-url');
-        if (url) window.open(url, '_blank');
+        if (url && url !== '#') this.openSafeUrl(url);
       });
     });
 
@@ -507,10 +498,12 @@ class App {
       btn.addEventListener('click', (e) => {
         e.stopPropagation();
         const url = btn.getAttribute('data-url');
-        if (url) {
+        if (url && isValidHttpUrl(url)) {
           navigator.clipboard.writeText(url).then(() => {
             this.showToast('已复制直达链接', '📋');
           });
+        } else {
+          this.showToast('链接无效，无法复制', '⚠️');
         }
       });
     });
@@ -539,7 +532,7 @@ class App {
   }
 
   /* -------------------------------------------------------------------------- */
-  /* 服务添加与编辑弹窗                                                         */
+  /* 添加 / 编辑                                                                */
   /* -------------------------------------------------------------------------- */
 
   openProjectModal(projectId = null) {
@@ -573,14 +566,25 @@ class App {
   handleProjectFormSubmit() {
     const id = document.getElementById('formProjectId').value || `proj-${Date.now()}`;
     const title = document.getElementById('formTitle').value.trim();
-    const customWanUrl = document.getElementById('formCustomWan').value.trim();
+    const customWanUrlRaw = document.getElementById('formCustomWan').value.trim();
     const pingEnabled = document.getElementById('formPing').checked;
+
+    if (!title) {
+      this.showToast('请填写服务名称', '⚠️');
+      return;
+    }
+
+    const parsedUrl = parseHttpUrl(customWanUrlRaw);
+    if (!parsedUrl) {
+      this.showToast('请输入有效的 http:// 或 https:// 链接', '⚠️');
+      return;
+    }
 
     const projectData = {
       id,
       title,
       categoryId: 'services',
-      customWanUrl: customWanUrl || undefined,
+      customWanUrl: parsedUrl.href,
       pingEnabled
     };
 
@@ -598,14 +602,14 @@ class App {
 
     const targetUrl = this.buildProjectUrl(projectData);
     this.pingService.probeService(projectData, targetUrl).then((res) => {
-      this.statusMap[id] = res;
+      this.statusMap[id] = { checking: false, ...res };
       this.updateStatusBadges();
       this.updateMetrics();
     });
   }
 
   /* -------------------------------------------------------------------------- */
-  /* 全局快速检索 (Ctrl + K)                                                    */
+  /* 搜索                                                                       */
   /* -------------------------------------------------------------------------- */
 
   openSearchModal() {
@@ -647,7 +651,7 @@ class App {
     if (this.searchResults.length === 0) {
       list.innerHTML = `
         <div style="padding: 24px; text-align: center; color: var(--text-muted); font-size: 0.85rem;">
-          没有找到匹配「${this.searchQuery}」的服务
+          没有找到匹配「${escapeHtml(this.searchQuery)}」的服务
         </div>
       `;
       return;
@@ -658,12 +662,13 @@ class App {
         const isSelected = idx === this.selectedSearchResultIndex;
         const targetUrl = this.buildProjectUrl(proj);
         const nativeFaviconUrl = getProjectNativeFavicon(targetUrl);
+        const title = proj.title || '未命名服务';
 
         return `
           <div class="search-result-item ${isSelected ? 'selected' : ''}" data-idx="${idx}">
             <div class="search-result-left">
-              <img src="${nativeFaviconUrl}" alt="${proj.title}" style="width: 20px; height: 20px; object-fit: contain; border-radius: 4px;" onerror="this.onerror=null;this.src='/favicon.png';" />
-              <div class="search-result-title">${proj.title}</div>
+              <img src="${escapeAttribute(nativeFaviconUrl)}" alt="${escapeAttribute(title)}" style="width: 20px; height: 20px; object-fit: contain; border-radius: 4px;" onerror="this.onerror=null;this.src='/favicon.svg';" />
+              <div class="search-result-title">${escapeHtml(title)}</div>
             </div>
             <span class="kbd-badge">↵ 打开</span>
           </div>
@@ -711,12 +716,12 @@ class App {
     const proj = this.searchResults[index];
     if (!proj) return;
     const url = this.buildProjectUrl(proj);
-    window.open(url, '_blank');
+    this.openSafeUrl(url);
     this.closeSearchModal();
   }
 
   /* -------------------------------------------------------------------------- */
-  /* 个性化设置                                                                 */
+  /* 设置                                                                       */
   /* -------------------------------------------------------------------------- */
 
   openSettingsModal() {
@@ -755,7 +760,6 @@ class App {
   }
 }
 
-// 启动客户端
 window.addEventListener('DOMContentLoaded', () => {
-  window.aetherHub = new App();
+  window.schrodingerPortal = new App();
 });

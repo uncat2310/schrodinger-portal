@@ -1,5 +1,6 @@
 services:
   schrodinger-portal:
+    # 正式部署优先拉取预构建镜像；本地开发可 docker compose build 使用下方 build
     image: ghcr.io/uncat2310/schrodinger-portal:latest
     build: .
     container_name: schrodinger-portal
@@ -9,3 +10,10 @@ services:
     environment:
       - PORT=3000
       - NODE_ENV=production
+      # 可选：允许自签证书探针（默认关闭）
+      # - ALLOW_INSECURE_TLS=false
+      # 可选：显式跨域来源（默认同源，不返回 CORS *）
+      # - CORS_ORIGIN=https://portal.example.com
+    # 可选：挂载私有项目配置（不要提交真实域名到公开仓库）
+    # volumes:
+    #   - ./config/projects.json:/app/config/projects.json:ro
