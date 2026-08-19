@@ -86,6 +86,43 @@ pm2 start server.js --name "schrodinger-portal"
 pm2 save
 ```
 
+可选 systemd（推荐生产）：
+
+```bash
+# 假设代码部署在 /srv/schrodinger-portal
+cat >/etc/systemd/system/schrodinger-portal.service <<'EOF'
+[Unit]
+Description=Schrodinger Portal - Service Navigation and Health Probe
+After=network.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/srv/schrodinger-portal
+ExecStart=/usr/bin/node /srv/schrodinger-portal/server.js
+Restart=always
+RestartSec=5
+Environment=PORT=3000
+Environment=NODE_ENV=production
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+systemctl daemon-reload
+systemctl enable --now schrodinger-portal.service
+```
+
+常用命令：
+
+```bash
+systemctl status schrodinger-portal
+systemctl restart schrodinger-portal
+journalctl -u schrodinger-portal -f
+```
+
+反向代理只需指向 `127.0.0.1:3000`（与 unit 名称无关）。若你曾使用旧名 `aetherhub`，请改用 `schrodinger-portal`。
+
 ---
 
 ## ⚙️ 配置
