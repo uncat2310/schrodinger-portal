@@ -26,26 +26,16 @@ export class PingService {
     }
   }
 
-  /** 拉取服务端 HEALTH_CACHE（不触发外连探测） */
+  /** 拉取服务端 HEALTH_CACHE（不触发外连探测）；返回本轮 cache 对象 */
   async fetchServerCache() {
-    if (!this.hasBackend) return false;
+    if (!this.hasBackend) return null;
     try {
       const res = await fetch('/api/ping-all', { signal: AbortSignal.timeout(4000) });
-      if (!res.ok) return false;
+      if (!res.ok) return null;
       const batchData = await res.json();
-      for (const [id, st] of Object.entries(batchData)) {
-        this.statusMap[id] = {
-          checking: false,
-          alive: Boolean(st.alive),
-          latency: st.latency || null,
-          lastChecked: st.lastChecked || Date.now(),
-          error: st.error || null
-        };
-      }
-      this.onStatusUpdate({ ...this.statusMap });
-      return true;
+      return batchData && typeof batchData === 'object' ? batchData : null;
     } catch {
-      return false;
+      return null;
     }
   }
 
@@ -149,17 +139,26 @@ export class PingService {
       }
 
       active.forEach((p) => {
-        this.statusMap[p.id] = { checking: true, ...this.statusMap[p.id] };
+        this.statusMap[p.id] = { ...this.statusMap[p.id], checking: true };
       });
       this.onStatusUpdate({ ...this.statusMap });
 
       if (trusted.length > 0) {
-        await this.fetchServerCache();
-        // 缓存未覆盖的 trusted 项保持 checking→不可用语义由 UI 处理
+        const cache = await this.fetchServerCache();
         for (const project of trusted) {
-          if (!this.statusMap[project.id] || this.statusMap[project.id].checking) {
+          const st = cache?.[project.id];
+          if (st) {
             this.statusMap[project.id] = {
               checking: false,
+              alive: Boolean(st.alive),
+              latency: st.latency || null,
+              lastChecked: st.lastChecked || Date.now(),
+              error: st.error || null
+            };
+          } else {
+            // 本轮 cache 无此 trusted 项：不要长期保留旧在线状态
+            this.statusMap[project.id] = {
+              checking: true,
               alive: false,
               latency: null,
               lastChecked: Date.now(),
@@ -177,7 +176,7 @@ export class PingService {
           await Promise.allSettled(
             custom.map(async ({ project, url }) => {
               const result = await this.probeService(project, url);
-              this.statusMap[project.id] = { checking: false, ...result };
+              this.statusMap[project.id] = { ...result, checking: false };
             })
           );
         }

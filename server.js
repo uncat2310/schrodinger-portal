@@ -320,11 +320,20 @@ async function probeHttpEndpoint(targetUrl, options = {}) {
               return;
             }
 
-            // 跳转目标必须重新校验 + pinning（即使原请求 trusted）
+            // 同 hostname 的 trusted 跳转（如 http→https）可继续 trusted；换 hostname 则严格 SSRF
+            let redirectTrusted = false;
+            if (trusted) {
+              try {
+                const nextHost = new URL(nextUrl).hostname.replace(/^\[|\]$/g, '').toLowerCase();
+                redirectTrusted = nextHost === hostname.toLowerCase();
+              } catch {
+                redirectTrusted = false;
+              }
+            }
             probeHttpEndpoint(nextUrl, {
               timeoutMs,
               redirectCount: redirectCount + 1,
-              trusted: false
+              trusted: redirectTrusted
             }).then(finish);
             return;
           }
@@ -519,12 +528,12 @@ function renderPageSSR(htmlTemplate) {
               <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
             </svg>
           </button>
-          <div class="stat-badge">
-            <span class="stat-label">服务总计</span>
+          <div class="stat-inline">
+            <span class="stat-label">服务</span>
             <span class="stat-num" id="metricTotal">${projects.length}</span>
           </div>
-          <div class="stat-badge">
-            <span class="stat-label">运行正常</span>
+          <div class="stat-inline">
+            <span class="stat-label">在线</span>
             <span class="stat-num online" id="metricOnline">${escapeHtml(onlineDisplay)}</span>
           </div>
         </div>
@@ -891,12 +900,19 @@ const server = http.createServer(async (req, res) => {
       res.setHeader('Cache-Control', 'public, max-age=0, must-revalidate');
 
       if (acceptEncoding.includes('gzip')) {
-        const gzipped = zlib.gzipSync(Buffer.from(ssrHtml, 'utf-8'));
-        res.writeHead(200, {
-          'Content-Encoding': 'gzip',
-          Vary: 'Accept-Encoding'
-        });
-        res.end(gzipped);
+        try {
+          const gzipped = await new Promise((resolve, reject) => {
+            zlib.gzip(Buffer.from(ssrHtml, 'utf-8'), (err, buf) => (err ? reject(err) : resolve(buf)));
+          });
+          res.writeHead(200, {
+            'Content-Encoding': 'gzip',
+            Vary: 'Accept-Encoding'
+          });
+          res.end(gzipped);
+        } catch {
+          res.writeHead(200);
+          res.end(ssrHtml);
+        }
       } else {
         res.writeHead(200);
         res.end(ssrHtml);

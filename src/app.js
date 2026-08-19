@@ -401,12 +401,12 @@ class App {
                 <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
               </svg>
             </button>
-            <div class="stat-badge">
-              <span class="stat-label">服务总计</span>
+            <div class="stat-inline">
+              <span class="stat-label">服务</span>
               <span class="stat-num" id="metricTotal">${projects.length}</span>
             </div>
-            <div class="stat-badge">
-              <span class="stat-label">运行正常</span>
+            <div class="stat-inline">
+              <span class="stat-label">在线</span>
               <span class="stat-num online" id="metricOnline">—</span>
             </div>
           </div>
@@ -647,14 +647,46 @@ class App {
   /* Modals                                                                     */
   /* -------------------------------------------------------------------------- */
 
+  getFocusable(container) {
+    if (!container) return [];
+    return [...container.querySelectorAll(
+      'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+    )].filter((el) => el.offsetParent !== null || el === document.activeElement);
+  }
+
+  bindFocusTrap(overlay) {
+    if (!overlay || overlay.dataset.focusTrapBound === '1') return;
+    overlay.dataset.focusTrapBound = '1';
+    overlay.addEventListener('keydown', (e) => {
+      if (e.key !== 'Tab' || !overlay.classList.contains('active')) return;
+      const panel = overlay.querySelector('.modal-card, .search-palette-box') || overlay;
+      const nodes = this.getFocusable(panel);
+      if (nodes.length === 0) {
+        e.preventDefault();
+        return;
+      }
+      const first = nodes[0];
+      const last = nodes[nodes.length - 1];
+      if (e.shiftKey && document.activeElement === first) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && document.activeElement === last) {
+        e.preventDefault();
+        first.focus();
+      }
+    });
+  }
+
   openOverlay(overlayId, focusSelector) {
     this.lastFocusedBeforeModal = document.activeElement;
     const modal = document.getElementById(overlayId);
-    modal?.classList.add('active');
-    modal?.setAttribute('aria-modal', 'true');
-    modal?.setAttribute('role', 'dialog');
+    if (!modal) return;
+    this.bindFocusTrap(modal);
+    modal.classList.add('active');
+    modal.setAttribute('aria-modal', 'true');
+    modal.setAttribute('role', 'dialog');
     setTimeout(() => {
-      const focusEl = modal?.querySelector(focusSelector);
+      const focusEl = modal.querySelector(focusSelector) || this.getFocusable(modal)[0];
       focusEl?.focus();
     }, 30);
   }

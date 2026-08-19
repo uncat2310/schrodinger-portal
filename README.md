@@ -88,8 +88,13 @@ pm2 save
 
 可选 systemd（推荐生产）：
 
+> 生产环境建议使用**独立非 root 用户**运行 Node 服务。
+
 ```bash
-# 假设代码部署在 /srv/schrodinger-portal
+# 创建专用用户与目录权限
+sudo useradd --system --home /srv/schrodinger-portal --shell /usr/sbin/nologin schrodinger
+sudo chown -R schrodinger:schrodinger /srv/schrodinger-portal
+
 cat >/etc/systemd/system/schrodinger-portal.service <<'EOF'
 [Unit]
 Description=Schrodinger Portal - Service Navigation and Health Probe
@@ -97,7 +102,8 @@ After=network.target
 
 [Service]
 Type=simple
-User=root
+User=schrodinger
+Group=schrodinger
 WorkingDirectory=/srv/schrodinger-portal
 ExecStart=/usr/bin/node /srv/schrodinger-portal/server.js
 Restart=always
@@ -162,6 +168,7 @@ docker run -d \
 | `PORT` | `3000` | 监听端口 |
 | `CORS_ORIGIN` | 空 | 默认同源，不返回 `Access-Control-Allow-Origin: *`；需要跨域时显式设置 |
 | `ALLOW_INSECURE_TLS` | `false` | 为 `true` 时探针才忽略 TLS 证书错误；默认严格校验 |
+| `TRUST_PROXY` | `false` | 仅当服务位于**可信反向代理**之后，且后端端口不对公网直接暴露时，才设为 `true` 以信任 `X-Forwarded-For`；默认不信任客户端伪造的转发头 |
 
 ---
 

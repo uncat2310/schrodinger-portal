@@ -198,8 +198,14 @@ body::before {
   inset: 0;
   pointer-events: none;
   z-index: 0;
-  opacity: 0.025;
+  opacity: 0.02;
   background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
+@media (max-width: 768px) {
+  body::before {
+    display: none;
+  }
 }
 
 .font-mono {
@@ -232,13 +238,13 @@ body::before {
 .app-header {
   position: relative;
   z-index: 50;
-  background: var(--bg-surface);
-  backdrop-filter: blur(var(--header-blur)) saturate(140%);
-  -webkit-backdrop-filter: blur(var(--header-blur)) saturate(140%);
-  border: 1px solid var(--border-subtle);
+  background: color-mix(in srgb, var(--bg-surface) 88%, transparent);
+  backdrop-filter: blur(var(--header-blur)) saturate(150%);
+  -webkit-backdrop-filter: blur(var(--header-blur)) saturate(150%);
+  border: 1px solid color-mix(in srgb, var(--border-subtle) 80%, transparent);
   border-radius: var(--radius-xl);
   padding: 16px 22px;
-  box-shadow: var(--shadow-sm);
+  box-shadow: 0 1px 2px rgba(42, 39, 35, 0.02);
 }
 
 /* True 3-Column CSS Grid: Left (1fr), Center (auto, 100% Dead-Center), Right (1fr) */
@@ -391,8 +397,8 @@ body::before {
   display: flex;
   align-items: center;
   gap: 8px;
-  background: var(--bg-input);
-  border: 1px solid var(--border-subtle);
+  background: color-mix(in srgb, var(--bg-input) 70%, transparent);
+  border: 1px solid color-mix(in srgb, var(--border-subtle) 70%, transparent);
   border-radius: var(--radius-full);
   padding: 8px 14px;
   color: var(--text-secondary);
@@ -401,6 +407,7 @@ body::before {
   transition: background-color var(--transition-fast), border-color var(--transition-fast), color var(--transition-fast), box-shadow var(--transition-fast);
   touch-action: manipulation;
   min-height: 38px;
+  box-shadow: none;
 }
 
 .search-trigger-btn:hover {
@@ -426,14 +433,14 @@ body::before {
   width: 38px;
   height: 38px;
   border-radius: var(--radius-full);
-  background: var(--bg-input);
-  border: 1px solid var(--border-subtle);
+  background: transparent;
+  border: 1px solid color-mix(in srgb, var(--border-subtle) 65%, transparent);
   color: var(--text-secondary);
   display: flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  transition: var(--transition-fast);
+  transition: background-color var(--transition-fast), border-color var(--transition-fast), color var(--transition-fast), box-shadow var(--transition-fast);
   touch-action: manipulation;
   flex-shrink: 0;
 }
@@ -520,12 +527,13 @@ body::before {
 .btn-primary {
   background: var(--accent-primary);
   color: #ffffff;
-  box-shadow: 0 3px 12px var(--accent-glow);
+  box-shadow: 0 1px 2px color-mix(in srgb, var(--accent-glow) 55%, transparent);
 }
 
 .btn-primary:hover {
   background: var(--accent-primary-hover);
   transform: translateY(-1px);
+  box-shadow: 0 4px 12px var(--accent-glow);
 }
 
 .btn-secondary {
@@ -617,16 +625,12 @@ body::before {
 }
 
 /* Section Stats Badges (Side-by-side with Title) */
-.stat-badge {
+.stat-inline {
   display: inline-flex;
-  align-items: center;
+  align-items: baseline;
   gap: 6px;
-  padding: 4px 10px;
-  background: var(--bg-surface);
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-full);
   font-size: 0.78rem;
-  box-shadow: var(--shadow-sm);
+  letter-spacing: 0.01em;
 }
 
 .stat-label {
@@ -638,6 +642,7 @@ body::before {
   font-weight: 700;
   color: var(--text-primary);
   font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
 }
 
 .stat-num.online {
@@ -690,12 +695,10 @@ body::before {
   from {
     opacity: 0;
     transform: translateY(8px);
-    filter: blur(3px);
   }
   to {
     opacity: 1;
     transform: translateY(0);
-    filter: blur(0);
   }
 }
 
@@ -833,11 +836,12 @@ body::before {
   display: flex;
   align-items: center;
   gap: 2px;
-  opacity: 0.35;
+  opacity: 0.45;
   transition: opacity var(--transition-fast);
 }
 
-.project-card:hover .card-manage-actions {
+.project-card:hover .card-manage-actions,
+.project-card:focus-within .card-manage-actions {
   opacity: 1;
 }
 
@@ -868,21 +872,31 @@ body::before {
 .btn-launch {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
-  padding: 4px 12px;
+  gap: 5px;
+  padding: 4px 11px;
   border-radius: var(--radius-full);
-  background: var(--accent-badge-bg);
-  color: var(--accent-badge-text);
-  font-size: 0.78rem;
+  background: color-mix(in srgb, var(--accent-badge-bg) 55%, transparent);
+  color: var(--text-secondary);
+  font-size: 0.76rem;
   font-weight: 600;
   text-decoration: none;
-  transition: var(--transition-fast);
+  border: 1px solid color-mix(in srgb, var(--border-subtle) 80%, transparent);
+  transition: background-color var(--transition-fast), border-color var(--transition-fast), color var(--transition-fast);
   touch-action: manipulation;
 }
 
+.btn-launch .btn-svg {
+  opacity: 0.85;
+}
+
 .btn-launch:hover {
-  background: var(--accent-primary);
-  color: #ffffff;
+  background: var(--accent-badge-bg);
+  border-color: var(--border-card-hover);
+  color: var(--accent-badge-text);
+}
+
+.btn-launch:hover .btn-svg {
+  opacity: 1;
 }
 
 /* Empty State */
@@ -1151,9 +1165,9 @@ body::before {
    ========================================================================== */
 
 .app-footer {
-  padding-top: 20px;
-  border-top: 1px solid var(--border-subtle);
-  font-size: 0.82rem;
+  padding-top: 18px;
+  border-top: 1px solid color-mix(in srgb, var(--border-subtle) 55%, transparent);
+  font-size: 0.78rem;
   color: var(--text-muted);
   text-align: center;
 }
@@ -1162,38 +1176,38 @@ body::before {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 10px;
+  gap: 8px;
   width: 100%;
 }
 
 .footer-copy {
-  font-weight: 500;
-  color: var(--text-muted);
+  font-weight: 450;
+  color: color-mix(in srgb, var(--text-muted) 88%, transparent);
 }
 
 .footer-dot {
   color: var(--text-muted);
-  opacity: 0.6;
+  opacity: 0.45;
 }
 
 .footer-github-link {
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  color: var(--text-secondary);
+  color: var(--text-muted);
   text-decoration: none;
   font-weight: 500;
-  padding: 3px 8px;
-  border-radius: var(--radius-full);
-  background: var(--bg-tag);
-  border: 1px solid var(--border-subtle);
-  transition: var(--transition-fast);
+  padding: 2px 4px;
+  border-radius: var(--radius-xs);
+  background: transparent;
+  border: none;
+  transition: color var(--transition-fast);
 }
 
 .footer-github-link:hover {
   color: var(--text-primary);
-  background: var(--bg-card);
-  border-color: var(--border-focus);
+  background: transparent;
+  border: none;
 }
 
 .github-svg {
